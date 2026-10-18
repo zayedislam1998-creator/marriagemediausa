@@ -1,4 +1,4 @@
-﻿import { AuthenticProfile, DomainRepository } from '@/db/repository';
+import { AuthenticProfile, DomainRepository } from '@/db/repository';
 
 export type ProposalStatus =
   | 'PENDING'

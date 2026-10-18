@@ -1,4 +1,4 @@
-﻿import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import domainSeed from '../../seed-data/marriagemediausa_domain_seed.json';
 import { db } from './index';
 import {

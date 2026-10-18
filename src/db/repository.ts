@@ -1,4 +1,4 @@
-﻿import domainSeed from '../../seed-data/marriagemediausa_domain_seed.json';
+import domainSeed from '../../seed-data/marriagemediausa_domain_seed.json';
 
 export interface Country {
   id: number;

@@ -1,4 +1,4 @@
-﻿import { client } from './index';
+import { client } from './index';
 
 async function runFormBuilderMigration() {
   console.log('[Migration] Creating form_builder_configs in PostgreSQL 18...');

@@ -1,4 +1,4 @@
-﻿'use server';
+'use server';
 
 import { getCurrentSession } from '@/lib/auth/session';
 import { AdminStore } from './store';

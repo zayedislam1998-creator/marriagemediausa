@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import { ShieldCheck, Mail, PhoneCall, Globe, Heart } from 'lucide-react';
 
 export function Footer() {

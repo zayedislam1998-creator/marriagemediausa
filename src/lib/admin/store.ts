@@ -1,4 +1,4 @@
-﻿import { DomainRepository, Package } from '@/db/repository';
+import { DomainRepository, Package } from '@/db/repository';
 
 export interface SeatMember {
   id: string;

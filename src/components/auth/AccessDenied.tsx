@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { ShieldAlert, ArrowLeft, LogOut, LayoutDashboard } from 'lucide-react';

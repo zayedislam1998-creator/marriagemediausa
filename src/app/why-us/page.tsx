@@ -1,4 +1,4 @@
-﻿import { AppHeader } from '@/components/layout/AppHeader';
+import { AppHeader } from '@/components/layout/AppHeader';
 import { Footer } from '@/components/layout/Footer';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { WhyHalalGrid } from '@/components/home/WhyHalalGrid';

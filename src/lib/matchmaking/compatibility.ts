@@ -1,4 +1,4 @@
-﻿import { AuthenticProfile } from '@/db/repository';
+import { AuthenticProfile } from '@/db/repository';
 
 export interface SuitorFilterCriteria {
   gender?: 'MALE' | 'FEMALE';

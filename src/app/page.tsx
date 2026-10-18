@@ -1,4 +1,4 @@
-﻿import { DomainRepository } from '@/db/repository';
+import { DomainRepository } from '@/db/repository';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { Footer } from '@/components/layout/Footer';

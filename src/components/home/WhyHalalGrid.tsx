@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import { ShieldCheck, UserCheck, EyeOff, FileText, Heart, Award, CheckCircle2, ArrowRight } from 'lucide-react';
 
 export function WhyHalalGrid() {
