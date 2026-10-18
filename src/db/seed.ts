@@ -15,7 +15,7 @@ async function runSeed() {
 
   try {
     // 1. Seed Super Admin
-    const adminPasswordHash = await bcrypt.hash('Admin@Marriage Media USA2026', 10);
+    const adminPasswordHash = await bcrypt.hash('Admin@MarriageMedia2026', 10);
     const [adminUser] = await db
       .insert(users)
       .values({

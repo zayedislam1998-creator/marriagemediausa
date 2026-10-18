@@ -5,7 +5,7 @@ import { users } from './schema';
 async function seedAdmin() {
   console.log('👑 Seeding Super Admin user...');
   try {
-    const adminPasswordHash = await bcrypt.hash('Admin@Marriage Media USA2026', 10);
+    const adminPasswordHash = await bcrypt.hash('Admin@MarriageMedia2026', 10);
     const [adminUser] = await db
       .insert(users)
       .values({
@@ -19,7 +19,7 @@ async function seedAdmin() {
       .onConflictDoNothing()
       .returning();
 
-    console.log(`✅ Super Admin: admin@marriagemediausa.com (Password: Admin@Marriage Media USA2026)`);
+    console.log(`✅ Super Admin: admin@marriagemediausa.com (Password: Admin@MarriageMedia2026)`);
     process.exit(0);
   } catch (error) {
     console.error('❌ Failed to seed admin:', error);

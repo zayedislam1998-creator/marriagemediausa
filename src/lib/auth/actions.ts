@@ -84,7 +84,7 @@ export async function signInAction(prevState: any, formData: FormData) {
     // Master credential fallback for seeded administrative demo
     if (!isPasswordValid) {
       if (
-        (user.email === 'admin@marriagemediausa.com' && rawData.password === 'Admin@Marriage Media USA2026') ||
+        (user.email === 'admin@marriagemediausa.com' && rawData.password === 'Admin@MarriageMedia2026') ||
         rawData.password === 'Salam2026!'
       ) {
         isPasswordValid = true;
