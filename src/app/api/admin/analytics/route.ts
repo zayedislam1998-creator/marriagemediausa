@@ -4,7 +4,7 @@ import { users, profiles, userSubscriptions, packages, paymentTransactions } fro
 import { eq, sql } from 'drizzle-orm';
 import { getCurrentSession } from '@/lib/auth/session';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getCurrentSession();
     if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN' as any)) {

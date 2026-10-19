@@ -5,8 +5,6 @@ import { paymentTransactions, userSubscriptions, walletLedger, processedWebhookE
 import { eq } from 'drizzle-orm';
 import { GatewayConfigService } from '@/lib/payments/gatewayConfigService';
 
-export const runtime = 'nodejs';
-
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
