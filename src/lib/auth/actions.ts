@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { redirect } from 'next/navigation';
 import { eq, or } from 'drizzle-orm';
 import { db } from '@/db';
-import { users, profiles, userSubscriptions, packages } from '@/db/schema';
+import { users, profiles, userSubscriptions, packages, userPhotos } from '@/db/schema';
 import {
   setSessionCookie,
   clearSessionCookie,
@@ -183,6 +183,10 @@ export async function signUpAction(prevState: any, formData: FormData) {
     gender: formData.get('gender')?.toString() || 'FEMALE',
     lookingFor: formData.get('lookingFor')?.toString() || 'MALE',
     adminPasscode: formData.get('adminPasscode')?.toString() || '',
+    country: formData.get('country')?.toString() || 'United States',
+    stateProvince: formData.get('stateProvince')?.toString() || '',
+    city: formData.get('city')?.toString() || '',
+    profileCreatedFor: formData.get('profileCreatedFor')?.toString() || 'Self',
   };
 
   const validation = signUpSchema.safeParse(rawData);
@@ -256,9 +260,9 @@ export async function signUpAction(prevState: any, formData: FormData) {
         halalDiet: 'STRICTLY_HALAL',
         educationLevel: "Bachelor's Degree",
         profession: 'Professional',
-        countryLivingIn: 'United States (USA)',
-        stateProvince: 'New York',
-        city: 'New York',
+        countryLivingIn: rawData.country || 'United States',
+        stateProvince: rawData.stateProvince || 'New York',
+        city: rawData.city || 'New York',
         zipCode: '10001',
         guardianName: 'Family Guardian',
         guardianRelation: 'Father',
@@ -354,8 +358,11 @@ export async function updateMemberProfileAction(prevState: any, formData: FormDa
     const aboutMe = formData.get('aboutMe')?.toString() || '';
     const whatIAmLookingFor = formData.get('whatIAmLookingFor')?.toString() || '';
     const photoPrivacy = formData.get('photoPrivacy')?.toString() || 'PUBLIC';
+    const photoUrl = formData.get('photoUrl')?.toString();
+    const photoThumbUrl = formData.get('photoThumbUrl')?.toString();
+    const photoBlurUrl = formData.get('photoBlurUrl')?.toString();
 
-    await db
+    const [updatedProfile] = await db
       .update(profiles)
       .set({
         fullName,
@@ -376,10 +383,23 @@ export async function updateMemberProfileAction(prevState: any, formData: FormDa
         aboutMe,
         whatIAmLookingFor,
         photoPrivacy,
+        coverPhotoUrl: photoUrl || undefined,
         completionPercentage: 90,
         updatedAt: new Date(),
       })
-      .where(eq(profiles.userId, session.userId));
+      .where(eq(profiles.userId, session.userId))
+      .returning();
+
+    if (updatedProfile && photoUrl) {
+      await db.insert(userPhotos).values({
+        profileId: updatedProfile.id,
+        urlFull: photoUrl,
+        urlThumb: photoThumbUrl || photoUrl,
+        urlBlur: photoBlurUrl || photoUrl,
+        isPrimary: true,
+        isApproved: true,
+      });
+    }
 
     return { success: true, message: 'Profile updated successfully!' };
   } catch (error: any) {

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Country, USState } from '@/db/repository';
 import { saveBiodataAction, uploadAvatarAction, uploadKycDocumentAction } from '@/lib/biodata/actions';
+import { MediaUploadPicker } from '@/components/media/MediaUploadPicker';
 import { calculateCompletionScore, BiodataFormData } from '@/lib/biodata/schema';
 
 interface BiodataWizardProps {
@@ -1057,33 +1058,39 @@ export function BiodataWizard({
                 </label>
               </div>
 
-              {/* Real Sharp Processing File Upload */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 600 }}>
-                  Upload Profile Avatar (Sharp WebP Generator):
-                </label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleAvatarUpload}
-                  disabled={uploadingImage}
+              {/* Enterprise Media Manager Picker */}
+              <div style={{ marginTop: 8 }}>
+                <MediaUploadPicker
+                  label="Profile Avatar (WebP & Purdah Shield)"
+                  description="Select from your Media Library or drag-and-drop upload from your computer."
+                  value={
+                    avatarResult
+                      ? {
+                          url: avatarResult.fullUrl,
+                          thumbUrl: avatarResult.thumbUrl,
+                          blurUrl: avatarResult.blurUrl,
+                          name: 'Profile Avatar',
+                        }
+                      : null
+                  }
+                  onChange={(media) => {
+                    if (media) {
+                      setAvatarResult({
+                        fullUrl: media.url,
+                        thumbUrl: media.thumbUrl,
+                        blurUrl: media.blurUrl,
+                      });
+                      handleChange('photoUrl', media.url);
+                      handleChange('photoThumbUrl', media.thumbUrl);
+                      handleChange('photoBlurUrl', media.blurUrl);
+                    } else {
+                      setAvatarResult(null);
+                      handleChange('photoUrl', '');
+                      handleChange('photoThumbUrl', '');
+                      handleChange('photoBlurUrl', '');
+                    }
+                  }}
                 />
-                {uploadingImage && <span style={{ fontSize: '0.75rem', color: 'var(--emerald-600)' }}>Processing Sharp 3-variant WebP...</span>}
-
-                {/* Real-time 3-variant Preview */}
-                {avatarResult && (
-                  <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <img src={avatarResult.thumbUrl} alt="Thumbnail" style={{ width: 64, height: 80, objectFit: 'cover', borderRadius: 6 }} />
-                      <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>Card Thumb</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <img src={avatarResult.blurUrl} alt="Purdah Blur" style={{ width: 64, height: 80, objectFit: 'cover', borderRadius: 6 }} />
-                      <div style={{ fontSize: '0.625rem', color: 'var(--coral-600)', fontWeight: 700 }}>24px Purdah Blur</div>
-                    </div>
-                    <span className="badge badge-emerald">✓ 3 Variants Generated in /uploads/</span>
-                  </div>
-                )}
               </div>
             </div>
 

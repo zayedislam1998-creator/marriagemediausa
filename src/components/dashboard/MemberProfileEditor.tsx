@@ -17,6 +17,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { updateMemberProfileAction } from '@/lib/auth/actions';
+import { MediaUploadPicker } from '@/components/media/MediaUploadPicker';
 
 interface MemberProfileEditorProps {
   initialProfile: any;
@@ -46,6 +47,11 @@ export function MemberProfileEditor({ initialProfile, userEmail }: MemberProfile
   const [aboutMe, setAboutMe] = useState(initialProfile?.aboutMe || '');
   const [whatIAmLookingFor, setWhatIAmLookingFor] = useState(initialProfile?.whatIAmLookingFor || '');
   const [photoPrivacy, setPhotoPrivacy] = useState(initialProfile?.photoPrivacy || 'PUBLIC');
+  const [avatar, setAvatar] = useState<{ url: string; thumbUrl: string; blurUrl: string; name: string } | null>(
+    initialProfile?.avatarUrl
+      ? { url: initialProfile.avatarUrl, thumbUrl: initialProfile.avatarUrl, blurUrl: initialProfile.avatarUrl, name: 'Profile Photo' }
+      : null
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,6 +77,11 @@ export function MemberProfileEditor({ initialProfile, userEmail }: MemberProfile
     formData.append('aboutMe', aboutMe);
     formData.append('whatIAmLookingFor', whatIAmLookingFor);
     formData.append('photoPrivacy', photoPrivacy);
+    if (avatar) {
+      formData.append('photoUrl', avatar.url);
+      formData.append('photoThumbUrl', avatar.thumbUrl);
+      formData.append('photoBlurUrl', avatar.blurUrl);
+    }
 
     const res = await updateMemberProfileAction(null, formData);
     setIsSubmitting(false);
@@ -213,6 +224,16 @@ export function MemberProfileEditor({ initialProfile, userEmail }: MemberProfile
                 <option value="PUBLIC">Public (Visible to verified members)</option>
                 <option value="BLURRED_PURDAH">🔒 Purdah Shield (Blurred photo, visible upon mutual consent)</option>
               </select>
+            </div>
+
+            {/* Profile Avatar Upload with Enterprise File Manager */}
+            <div style={{ gridColumn: '1 / -1', marginTop: 10 }}>
+              <MediaUploadPicker
+                label="Profile Photo (Sharp WebP & Purdah Shield)"
+                description="Manage your profile image with our Enterprise File Manager. Automatically generates 3 WebP variants with 24px Purdah blur."
+                value={avatar}
+                onChange={(m) => setAvatar(m)}
+              />
             </div>
           </div>
         </div>

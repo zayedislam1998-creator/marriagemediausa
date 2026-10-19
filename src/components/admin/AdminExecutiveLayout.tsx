@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   LogOut,
   LayoutDashboard,
+  FolderOpen,
 } from 'lucide-react';
 import { AdminMemberRecord, FormBuilderConfigRecord, ProfileRequirementRecord } from '@/db/queries';
 import { SeatMember, AuditLog } from '@/lib/admin/store';
@@ -25,6 +26,7 @@ import { MembersDirectoryTab } from './MembersDirectoryTab';
 import { FormStudioTab } from './FormStudioTab';
 import { PricingPackagesTab } from './PricingPackagesTab';
 import { SettingsSecurityTab } from './SettingsSecurityTab';
+import { MediaManagerTab } from './MediaManagerTab';
 import { ProvisionMemberModal } from './ProvisionMemberModal';
 import { useCrossTabSync } from '@/lib/sync/broadcastSync';
 import { firebaseLogout } from '@/lib/firebase/authService';
@@ -51,7 +53,7 @@ export function AdminExecutiveLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [provisionModalOpen, setProvisionModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'members' | 'forms' | 'packages' | 'kyc' | 'analytics' | 'settings'
+    'members' | 'forms' | 'packages' | 'kyc' | 'media' | 'analytics' | 'settings'
   >('members');
   const [seatActionMsg, setSeatActionMsg] = useState<string | null>(null);
 
@@ -98,6 +100,14 @@ export function AdminExecutiveLayout({
       icon: FileCheck,
       badge: 'Desk',
       badgeColor: 'var(--emerald-700)',
+    },
+    {
+      id: 'media' as const,
+      label: 'Media & Files',
+      shortLabel: 'Media',
+      icon: FolderOpen,
+      badge: 'VPS Disk',
+      badgeColor: '#059669',
     },
     {
       id: 'analytics' as const,
@@ -674,7 +684,12 @@ export function AdminExecutiveLayout({
           </div>
         )}
 
-        {/* VIEW 5: Revenue & Analytics */}
+        {/* VIEW 5: Media & Files Manager */}
+        {activeTab === 'media' && (
+          <MediaManagerTab />
+        )}
+
+        {/* VIEW 6: Revenue & Analytics */}
         {activeTab === 'analytics' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div
