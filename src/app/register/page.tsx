@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Footer } from '@/components/layout/Footer';
 import { BottomNav } from '@/components/layout/BottomNav';
-import { firebaseRegister } from '@/lib/firebase/authService';
 import {
   COUNTRIES,
   US_STATES,
@@ -198,13 +197,6 @@ export default function RegisterPage() {
       const serverData = await serverRes.json();
 
       if (serverRes.ok && serverData.success) {
-        try {
-          const assignedRole = adminPasscode.trim() === 'MB-ADMIN-2026' ? 'SUPER_ADMIN' : 'MEMBER';
-          await firebaseRegister(emailTrimmed, password, fullNameTrimmed, gender, assignedRole);
-        } catch {
-          // Secondary fallback
-        }
-
         if (serverData.user?.role === 'SUPER_ADMIN') {
           window.location.href = '/admin?welcome=admin';
         } else {

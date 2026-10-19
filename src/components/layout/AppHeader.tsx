@@ -24,7 +24,6 @@ import {
   LogOut,
 } from 'lucide-react';
 
-import { onFirebaseAuthState } from '@/lib/firebase/authService';
 import { executeUniversalLogout } from '@/lib/auth/universalLogout';
 
 export function AppHeader() {
@@ -45,7 +44,7 @@ export function AppHeader() {
   useEffect(() => {
     let isCancelled = false;
 
-    // 1. Primary check: PostgreSQL HTTP-Only session
+    // Primary check: PostgreSQL HTTP-Only session (/api/auth/me)
     const checkServerSession = async () => {
       try {
         const res = await fetch('/api/auth/me');
@@ -62,40 +61,19 @@ export function AppHeader() {
                 tier: data.user.tier,
               },
             });
-            return true;
+            return;
           }
         }
       } catch {}
-      return false;
+      if (!isCancelled) {
+        setCurrentUser({ authenticated: false });
+      }
     };
 
     checkServerSession();
 
-    // 2. Client SDK synchronization
-    const unsubscribe = onFirebaseAuthState(async (user, loading) => {
-      if (loading) return;
-      if (user && !isCancelled) {
-        setCurrentUser({
-          authenticated: true,
-          user: {
-            userId: user.uid,
-            email: user.email,
-            fullName: user.fullName || user.email,
-            role: user.role,
-            tier: user.membershipTier,
-          },
-        });
-      } else if (!user && !isCancelled) {
-        const hasServer = await checkServerSession();
-        if (!hasServer && !isCancelled) {
-          setCurrentUser({ authenticated: false });
-        }
-      }
-    });
-
     return () => {
       isCancelled = true;
-      unsubscribe();
     };
   }, []);
 

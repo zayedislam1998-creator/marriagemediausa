@@ -385,6 +385,115 @@ export async function runAutoMigration(): Promise<void> {
     );
   `).catch(console.error);
 
+  // Table: bookmarks
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS "bookmarks" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "bookmarked_profile_id" uuid NOT NULL REFERENCES "profiles"("id") ON DELETE CASCADE,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    );
+  `).catch(console.error);
+
+  // Table: profile_views
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS "profile_views" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "viewer_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "viewed_profile_id" uuid NOT NULL REFERENCES "profiles"("id") ON DELETE CASCADE,
+      "viewed_at" timestamp with time zone DEFAULT now() NOT NULL
+    );
+  `).catch(console.error);
+
+  // Table: photo_access_requests
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS "photo_access_requests" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "requester_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "target_profile_id" uuid NOT NULL REFERENCES "profiles"("id") ON DELETE CASCADE,
+      "status" "request_status_enum" DEFAULT 'PENDING' NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    );
+  `).catch(console.error);
+
+  // Table: contact_unlock_requests
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS "contact_unlock_requests" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "requester_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "target_profile_id" uuid NOT NULL REFERENCES "profiles"("id") ON DELETE CASCADE,
+      "status" "request_status_enum" DEFAULT 'PENDING' NOT NULL,
+      "credit_deducted" integer DEFAULT 1 NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    );
+  `).catch(console.error);
+
+  // Table: kyc_verifications
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS "kyc_verifications" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "profile_id" uuid NOT NULL REFERENCES "profiles"("id") ON DELETE CASCADE,
+      "doc_type" "kyc_doc_type" NOT NULL,
+      "doc_number" varchar(80) NOT NULL,
+      "doc_file_path" varchar(255) NOT NULL,
+      "status" "kyc_status_enum" DEFAULT 'PENDING' NOT NULL,
+      "moderator_notes" text,
+      "reviewed_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+      "reviewed_at" timestamp with time zone,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    );
+  `).catch(console.error);
+
+  // Table: moderation_reports
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS "moderation_reports" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "reporter_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "reported_profile_id" uuid NOT NULL REFERENCES "profiles"("id") ON DELETE CASCADE,
+      "reason" varchar(100) NOT NULL,
+      "details" text,
+      "status" varchar(30) DEFAULT 'OPEN' NOT NULL,
+      "assigned_to" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    );
+  `).catch(console.error);
+
+  // Table: success_stories
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS "success_stories" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "title" varchar(200) NOT NULL,
+      "couple_names" varchar(150) NOT NULL,
+      "wedding_date" date,
+      "image_url" varchar(255),
+      "story_body" text NOT NULL,
+      "is_published" boolean DEFAULT true NOT NULL,
+      "created_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    );
+  `).catch(console.error);
+
+  // Essential Indexes (Safe)
+  const safeIndexes = [
+    'CREATE UNIQUE INDEX IF NOT EXISTS "unique_bookmark" ON "bookmarks" ("user_id", "bookmarked_profile_id")',
+    'CREATE UNIQUE INDEX IF NOT EXISTS "unique_contact_unlock" ON "contact_unlock_requests" ("requester_id", "target_profile_id")',
+    'CREATE UNIQUE INDEX IF NOT EXISTS "unique_conversation_pair" ON "conversations" ("user_one", "user_two")',
+    'CREATE UNIQUE INDEX IF NOT EXISTS "unique_photo_access" ON "photo_access_requests" ("requester_id", "target_profile_id")',
+    'CREATE UNIQUE INDEX IF NOT EXISTS "unique_active_proposal" ON "proposals" ("sender_id", "receiver_id")',
+    'CREATE INDEX IF NOT EXISTS "idx_messages_conversation" ON "messages" ("conversation_id", "created_at")',
+    'CREATE INDEX IF NOT EXISTS "idx_transactions_user" ON "payment_transactions" ("user_id", "created_at")',
+    'CREATE INDEX IF NOT EXISTS "idx_transactions_status" ON "payment_transactions" ("status", "created_at")',
+    'CREATE INDEX IF NOT EXISTS "idx_profile_views_viewed" ON "profile_views" ("viewed_profile_id", "viewed_at")',
+    'CREATE INDEX IF NOT EXISTS "idx_profiles_search" ON "profiles" ("gender", "country_living_in", "state_province", "age")',
+    'CREATE INDEX IF NOT EXISTS "idx_proposals_receiver" ON "proposals" ("receiver_id", "status")',
+    'CREATE INDEX IF NOT EXISTS "idx_proposals_sender" ON "proposals" ("sender_id", "status")',
+    'CREATE INDEX IF NOT EXISTS "idx_wallet_ledger_user" ON "wallet_ledger" ("user_id", "created_at")',
+  ];
+
+  for (const idxSql of safeIndexes) {
+    await client.unsafe(idxSql).catch(() => {});
+  }
+
   // 4. Default Package Seeding
   try {
     const pkgCount = await client`SELECT count(*) FROM "packages"`;
@@ -428,6 +537,49 @@ export async function runAutoMigration(): Promise<void> {
     }
   } catch (err) {
     console.warn('[Auto-Migrate] Admin seeding error:', err);
+  }
+
+  // 6. Default Form Builder Configs Seeding
+  try {
+    const formCount = await client`SELECT count(*) FROM "form_builder_configs"`;
+    if (parseInt(formCount[0]?.count || '0') === 0) {
+      console.log('[Auto-Migrate] Seeding default Form Builder configurations...');
+      const forms = [
+        {
+          form_id: 'login',
+          title: 'Member & Admin Login Portal',
+          theme: 'emerald',
+          border_radius: '12px',
+          button_text: 'Sign In to Marriage Media USA',
+          fields_json: JSON.stringify([
+            { id: 'f_email', fieldKey: 'email', label: 'Email Address', placeholder: 'your.email@example.com', type: 'email', required: true, width: 'full', order: 1 },
+            { id: 'f_password', fieldKey: 'password', label: 'Security Password', placeholder: '••••••••••••', type: 'password', required: true, width: 'full', order: 2 },
+          ]),
+        },
+        {
+          form_id: 'register',
+          title: 'Authentic 100% Halal Registration',
+          theme: 'emerald',
+          border_radius: '12px',
+          button_text: 'Create Verified Halal Account',
+          fields_json: JSON.stringify([
+            { id: 'f_reg_name', fieldKey: 'full_name', label: 'Full Legal Name', placeholder: 'e.g. Shahidul Islam', type: 'text', required: true, width: 'half', order: 1 },
+            { id: 'f_reg_email', fieldKey: 'email', label: 'Email Address', placeholder: 'you@example.com', type: 'email', required: true, width: 'half', order: 2 },
+            { id: 'f_reg_phone', fieldKey: 'phone_number', label: 'Phone Number', placeholder: '+1 (555) 000-0000', type: 'tel', required: true, width: 'half', order: 3 },
+            { id: 'f_reg_pass', fieldKey: 'password', label: 'Account Password', placeholder: 'Minimum 8 characters', type: 'password', required: true, width: 'half', order: 4 },
+          ]),
+        },
+      ];
+      for (const f of forms) {
+        await client`
+          INSERT INTO "form_builder_configs" (form_id, title, theme, border_radius, button_text, fields_json)
+          VALUES (${f.form_id}, ${f.title}, ${f.theme}, ${f.border_radius}, ${f.button_text}, ${f.fields_json}::jsonb)
+          ON CONFLICT (form_id) DO NOTHING;
+        `.catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('[Auto-Migrate] Form config seeding error:', err);
   }
 
   console.log('[Auto-Migrate] ✓ Database schema verified and ready.');

@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Footer } from '@/components/layout/Footer';
 import { BottomNav } from '@/components/layout/BottomNav';
-import { firebaseLogin, firebaseLogout } from '@/lib/firebase/authService';
+import { firebaseLogout } from '@/lib/firebase/authService';
 import { executeUniversalLogout } from '@/lib/auth/universalLogout';
 import {
   Lock,
@@ -83,12 +83,6 @@ function LoginForm() {
       const serverData = await serverRes.json();
 
       if (serverRes.ok && serverData.success) {
-        try {
-          await firebaseLogin(idVal, passVal);
-        } catch {
-          // Firebase fallback optional
-        }
-
         const isAdmin =
           serverData.user?.role === 'SUPER_ADMIN' ||
           serverData.user?.role === 'ADMIN' ||
@@ -109,21 +103,7 @@ function LoginForm() {
         return;
       }
 
-      // 2. Client-side Firebase fallback
-      const fbRes = await firebaseLogin(idVal, passVal);
-      if (fbRes.success && fbRes.user) {
-        const isAdmin =
-          fbRes.user.role === 'SUPER_ADMIN' ||
-          fbRes.user.role === 'ADMIN' ||
-          idVal.includes('admin') ||
-          idVal === 'skyxamerica24@gmail.com';
-
-        const target = isAdmin ? '/admin' : '/dashboard';
-        window.location.href = target;
-        return;
-      }
-
-      setCustomError(serverData.error || fbRes.error || 'Invalid credentials. Please verify your email/phone and password.');
+      setCustomError(serverData.error || 'Invalid credentials. Please verify your email/phone and password.');
       setIsPending(false);
     } catch {
       setCustomError('Authentication service temporarily unavailable. Please verify your connection.');

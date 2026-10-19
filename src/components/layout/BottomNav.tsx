@@ -4,8 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { Home, Search, Sparkles, Crown, User, LogIn, LayoutDashboard } from 'lucide-react';
-import { onFirebaseAuthState } from '@/lib/firebase/authService';
-
 export function BottomNav() {
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState<{
@@ -14,15 +12,24 @@ export function BottomNav() {
   } | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onFirebaseAuthState((user, loading) => {
-      if (loading) return;
-      if (user) {
-        setCurrentUser({ authenticated: true, role: user.role });
-      } else {
-        setCurrentUser({ authenticated: false });
-      }
-    });
-    return () => unsubscribe();
+    let isCancelled = false;
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isCancelled) {
+          if (data && data.authenticated && data.user) {
+            setCurrentUser({ authenticated: true, role: data.user.role });
+          } else {
+            setCurrentUser({ authenticated: false });
+          }
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) setCurrentUser({ authenticated: false });
+      });
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   const isHomeActive = pathname === '/';

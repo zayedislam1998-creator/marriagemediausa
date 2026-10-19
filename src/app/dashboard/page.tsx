@@ -10,7 +10,7 @@ import { Crown, ArrowRight, LogOut } from 'lucide-react';
 export default function MemberDashboard() {
   const { user, isLoading, isAdmin, logout } = useRequireAuth();
 
-  if (isLoading || !user) {
+  if (isLoading) {
     return (
       <div
         style={{
@@ -36,6 +36,63 @@ export default function MemberDashboard() {
           <p style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>
             Verifying Authentication & Loading Dashboard...
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#f8fafc',
+        }}
+      >
+        <div style={{ textAlign: 'center', padding: '30px 20px', maxWidth: 420 }}>
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 16,
+              background: '#ecfdf5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              border: '1px solid #a7f3d0',
+            }}
+          >
+            <Crown size={24} style={{ color: '#059669' }} />
+          </div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>
+            Authentication Required
+          </h2>
+          <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: 20 }}>
+            Please sign in to access your sacred matrimonial dashboard and curated matches.
+          </p>
+          <Link
+            href="/login?redirect=/dashboard"
+            className="btn-3d-emerald"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              padding: '10px 22px',
+              borderRadius: 10,
+              fontWeight: 700,
+              fontSize: '0.875rem',
+              textDecoration: 'none',
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          >
+            Sign In to Account <ArrowRight size={15} />
+          </Link>
         </div>
       </div>
     );

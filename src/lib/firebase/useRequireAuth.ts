@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { onFirebaseAuthState } from '@/lib/firebase/authService';
 import { executeUniversalLogout } from '@/lib/auth/universalLogout';
 import { FirestoreUser } from '@/lib/firebase/firestoreService';
 
@@ -21,99 +20,81 @@ export function useRequireAuth(options?: UseRequireAuthOptions) {
   useEffect(() => {
     let isCancelled = false;
 
-    const checkServerSessionFallback = async (): Promise<boolean> => {
+    // Safety fallback timeout: under NO circumstances will loading spinner stay stuck > 3.5s
+    const safetyTimer = setTimeout(() => {
+      if (!isCancelled && isLoading) {
+        setIsLoading(false);
+        if (!user && !hasRedirectedRef.current) {
+          hasRedirectedRef.current = true;
+          const target = pathname || '/dashboard';
+          router.push(`/login?redirect=${encodeURIComponent(target)}`);
+        }
+      }
+    }, 3500);
+
+    const checkAuthentication = async () => {
       try {
+        // 1. Authoritative check: PostgreSQL HTTP-Only session (/api/auth/me)
         const res = await fetch('/api/auth/me');
-        if (!res.ok) return false;
-        const data = await res.json();
-        if (data.authenticated && data.user) {
-          if (!isCancelled) {
-            const mappedUser: FirestoreUser = {
-              uid: data.user.userId,
-              email: data.user.email,
-              fullName: data.user.fullName || 'Distinguished Member',
-              role: data.user.role || 'MEMBER',
-              membershipTier: data.user.tier || 'GOLD',
-              status: 'ACTIVE',
-              profileId: data.user.profileId || `MMU_${data.user.userId.slice(-6)}`,
-            };
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.user) {
+            if (!isCancelled) {
+              const mappedUser: FirestoreUser = {
+                uid: data.user.userId,
+                email: data.user.email,
+                fullName: data.user.fullName || 'Distinguished Member',
+                role: data.user.role || 'MEMBER',
+                membershipTier: data.user.tier || 'GOLD',
+                status: 'ACTIVE',
+                profileId: data.user.profileId || `MMU_${data.user.userId.slice(-6)}`,
+              };
 
-            const isAdmin =
-              mappedUser.role === 'SUPER_ADMIN' ||
-              mappedUser.role === 'ADMIN' ||
-              (mappedUser.email && (
-                mappedUser.email.toLowerCase() === 'skyxamerica24@gmail.com' ||
-                mappedUser.email.toLowerCase().includes('admin')
-              ));
+              const isAdminUser =
+                mappedUser.role === 'SUPER_ADMIN' ||
+                mappedUser.role === 'ADMIN' ||
+                (mappedUser.email && (
+                  mappedUser.email.toLowerCase() === 'skyxamerica24@gmail.com' ||
+                  mappedUser.email.toLowerCase().includes('admin')
+                ));
 
-            if (options?.requireRole === 'ADMIN' && !isAdmin) {
+              if (options?.requireRole === 'ADMIN' && !isAdminUser) {
+                setUser(mappedUser);
+                setIsUnauthorizedRole(true);
+                setIsLoading(false);
+                return;
+              }
+
               setUser(mappedUser);
-              setIsUnauthorizedRole(true);
+              setIsUnauthorizedRole(false);
               setIsLoading(false);
-              return true;
+              return;
             }
-
-            setUser(mappedUser);
-            setIsUnauthorizedRole(false);
-            setIsLoading(false);
           }
-          return true;
         }
       } catch (err) {
-        console.warn('[Auth] Server session fallback check error:', err);
+        console.warn('[Auth] Session check warning:', err);
       }
-      return false;
+
+      // If not authenticated via server session
+      if (!isCancelled) {
+        setUser(null);
+        setIsLoading(false);
+
+        if (!hasRedirectedRef.current) {
+          hasRedirectedRef.current = true;
+          const target = pathname || '/dashboard';
+          const redirectUrl = `/login?redirect=${encodeURIComponent(target)}`;
+          router.push(redirectUrl);
+        }
+      }
     };
 
-    const unsubscribe = onFirebaseAuthState(async (authUser, loading) => {
-      if (loading) return;
-
-      if (!authUser) {
-        // Check if there is an active PostgreSQL server session (mb_session cookie)
-        const hasServerSession = await checkServerSessionFallback();
-        if (hasServerSession) return;
-
-        if (!isCancelled) {
-          setUser(null);
-          setIsLoading(false);
-
-          if (!hasRedirectedRef.current) {
-            hasRedirectedRef.current = true;
-            const target = pathname || '/dashboard';
-            const redirectUrl = `/login?redirect=${encodeURIComponent(target)}`;
-            router.push(redirectUrl);
-          }
-        }
-        return;
-      }
-
-      const isAdmin =
-        authUser.role === 'SUPER_ADMIN' ||
-        authUser.role === 'ADMIN' ||
-        (authUser.email && (
-          authUser.email.toLowerCase() === 'skyxamerica24@gmail.com' ||
-          authUser.email.toLowerCase().includes('admin')
-        ));
-
-      if (options?.requireRole === 'ADMIN' && !isAdmin) {
-        if (!isCancelled) {
-          setUser(authUser);
-          setIsUnauthorizedRole(true);
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      if (!isCancelled) {
-        setUser(authUser);
-        setIsUnauthorizedRole(false);
-        setIsLoading(false);
-      }
-    });
+    checkAuthentication();
 
     return () => {
       isCancelled = true;
-      unsubscribe();
+      clearTimeout(safetyTimer);
     };
   }, [router, pathname, options?.requireRole]);
 
