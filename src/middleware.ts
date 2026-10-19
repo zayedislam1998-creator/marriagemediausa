@@ -67,20 +67,29 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // 5. Already logged in users accessing /login or /register
+  // 5. Handling /login or /register requests
   if (pathname === '/login' || pathname === '/register') {
-    if (session) {
-      if (session.role === 'SUPER_ADMIN') {
-        return NextResponse.redirect(new URL('/admin', req.url));
-      }
-      if (session.role === 'EDITOR') {
-        return NextResponse.redirect(new URL('/admin/cms', req.url));
-      }
-      if (session.role === 'MODERATOR') {
-        return NextResponse.redirect(new URL('/admin/kyc', req.url));
-      }
-      return NextResponse.redirect(new URL('/dashboard', req.url));
+    const searchParams = req.nextUrl.searchParams;
+    const hasErrorParam = searchParams.has('error');
+    const hasLogoutParam = searchParams.has('logout') || searchParams.has('logged_out');
+
+    // If explicit logout or error parameter is present, ensure mb_session is purged
+    if (hasErrorParam || hasLogoutParam) {
+      const response = NextResponse.next();
+      response.cookies.set('mb_session', '', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 0,
+        path: '/',
+        expires: new Date(0),
+      });
+      response.cookies.delete('mb_session');
+      return response;
     }
+
+    // Allow user to access /login and /register directly without forced auto-redirection
+    return NextResponse.next();
   }
 
   return NextResponse.next();
@@ -88,7 +97,9 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    '/admin',
     '/admin/:path*',
+    '/dashboard',
     '/dashboard/:path*',
     '/login',
     '/register',

@@ -7,6 +7,9 @@ import {
   memberResumes,
   profileRequirementsConfig,
   formBuilderConfigs,
+  paymentGatewaysConfig,
+  paymentTransactions,
+  walletLedger,
 } from './schema';
 import { eq, desc, and } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
@@ -755,6 +758,171 @@ export async function assignUserSubscriptionTierInDb(userId: string, tierName: s
   } catch (error) {
     console.error('Error assigning user subscription in DB:', error);
     return { success: false, error: 'Database update failed' };
+  }
+}
+
+// ============================================================================
+// PAYMENT GATEWAYS & LEDGER QUERIES
+// ============================================================================
+
+export async function getAllGatewayConfigsFromDb() {
+  try {
+    const rows = await db.select().from(paymentGatewaysConfig);
+    return rows.map((r) => {
+      const secretKey = r.encryptedSecretKey || '';
+      const webhookSecret = r.encryptedWebhookSecret || '';
+      const publicKey = r.publicKey || '';
+
+      const isPlaceholder = secretKey.includes('placeholder');
+      const maskedSecret = isPlaceholder
+        ? ''
+        : secretKey.length > 8
+        ? `${secretKey.slice(0, 7)}••••••••${secretKey.slice(-4)}`
+        : '••••••••';
+
+      const maskedWebhook = webhookSecret.includes('placeholder')
+        ? ''
+        : webhookSecret.length > 8
+        ? `${webhookSecret.slice(0, 6)}••••••••${webhookSecret.slice(-4)}`
+        : '••••••••';
+
+      return {
+        id: r.id,
+        gateway: r.gateway,
+        mode: r.mode,
+        isActive: r.isActive,
+        publicKey: publicKey.includes('placeholder') ? '' : publicKey,
+        secretKeyMasked: maskedSecret,
+        secretKeyRaw: isPlaceholder ? '' : secretKey,
+        webhookSecretMasked: maskedWebhook,
+        webhookSecretRaw: webhookSecret.includes('placeholder') ? '' : webhookSecret,
+        webhookId: r.webhookId || '',
+        settingsJson: (r.settingsJson as Record<string, any>) || {},
+        lastTestedAt: r.lastTestedAt,
+        testStatus: r.testStatus,
+        lastTestMessage: r.lastTestMessage,
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching admin gateway configs from DB:', error);
+    throw error;
+  }
+}
+
+export async function getGatewayConfigFromDb(gateway: 'STRIPE' | 'PAYPAL') {
+  try {
+    const [record] = await db
+      .select()
+      .from(paymentGatewaysConfig)
+      .where(eq(paymentGatewaysConfig.gateway, gateway));
+
+    if (!record) return null;
+
+    let secretKey = record.encryptedSecretKey;
+    let publicKey = record.publicKey;
+    let webhookSecret = record.encryptedWebhookSecret;
+
+    if (gateway === 'STRIPE') {
+      if ((!secretKey || secretKey.includes('placeholder')) && process.env.STRIPE_SECRET_KEY) {
+        secretKey = process.env.STRIPE_SECRET_KEY;
+      }
+      if ((!publicKey || publicKey.includes('placeholder')) && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+        publicKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+      }
+      if ((!webhookSecret || webhookSecret.includes('placeholder')) && process.env.STRIPE_WEBHOOK_SECRET) {
+        webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      }
+    } else if (gateway === 'PAYPAL') {
+      if ((!publicKey || publicKey.includes('placeholder')) && process.env.PAYPAL_CLIENT_ID) {
+        publicKey = process.env.PAYPAL_CLIENT_ID;
+      }
+      if ((!secretKey || secretKey.includes('placeholder')) && process.env.PAYPAL_CLIENT_SECRET) {
+        secretKey = process.env.PAYPAL_CLIENT_SECRET;
+      }
+    }
+
+    return {
+      gateway: record.gateway,
+      mode: record.mode,
+      isActive: record.isActive,
+      publicKey: publicKey || '',
+      secretKey: secretKey || '',
+      webhookSecret: webhookSecret || '',
+      webhookId: record.webhookId,
+      settingsJson: (record.settingsJson as Record<string, any>) || {},
+      lastTestedAt: record.lastTestedAt,
+      testStatus: record.testStatus,
+      lastTestMessage: record.lastTestMessage,
+    };
+  } catch (error) {
+    console.error(`Error retrieving gateway config from DB for ${gateway}:`, error);
+    return null;
+  }
+}
+
+export async function saveGatewayConfigInDb(
+  gateway: 'STRIPE' | 'PAYPAL',
+  data: {
+    mode: 'TEST' | 'LIVE';
+    isActive: boolean;
+    publicKey: string;
+    secretKey: string;
+    webhookSecret?: string;
+    webhookId?: string;
+    settingsJson?: Record<string, any>;
+  }
+) {
+  try {
+    const updateData: Record<string, any> = {
+      mode: data.mode,
+      isActive: data.isActive,
+      publicKey: data.publicKey,
+      updatedAt: new Date(),
+    };
+
+    if (data.secretKey) {
+      updateData.encryptedSecretKey = data.secretKey;
+    }
+    if (data.webhookSecret !== undefined) {
+      updateData.encryptedWebhookSecret = data.webhookSecret;
+    }
+    if (data.webhookId !== undefined) {
+      updateData.webhookId = data.webhookId;
+    }
+    if (data.settingsJson !== undefined) {
+      updateData.settingsJson = data.settingsJson;
+    }
+
+    const [updated] = await db
+      .update(paymentGatewaysConfig)
+      .set(updateData)
+      .where(eq(paymentGatewaysConfig.gateway, gateway))
+      .returning();
+
+    return { success: true, record: updated };
+  } catch (error: any) {
+    console.error(`Error saving gateway config in DB for ${gateway}:`, error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateGatewayTestStatusInDb(
+  gateway: 'STRIPE' | 'PAYPAL',
+  status: 'SUCCESS' | 'FAILED',
+  message: string
+) {
+  try {
+    await db
+      .update(paymentGatewaysConfig)
+      .set({
+        lastTestedAt: new Date(),
+        testStatus: status,
+        lastTestMessage: message,
+        updatedAt: new Date(),
+      })
+      .where(eq(paymentGatewaysConfig.gateway, gateway));
+  } catch (e) {
+    console.error('Failed to update gateway test status in DB:', e);
   }
 }
 

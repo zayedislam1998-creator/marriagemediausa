@@ -21,19 +21,15 @@ import {
   Mail,
   Phone,
   Lock,
-  Sparkles,
   ArrowRight,
   AlertCircle,
   ShieldCheck,
   Eye,
   EyeOff,
   KeyRound,
-  MapPin,
-  Heart,
-  Globe,
-  CheckCircle2,
   Shield,
   BookOpen,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -42,7 +38,6 @@ export default function RegisterPage() {
   // Primary Account Fields
   const [profileCreatedFor, setProfileCreatedFor] = useState('Self');
   const [gender, setGender] = useState<'FEMALE' | 'MALE'>('FEMALE');
-  const [lookingFor, setLookingFor] = useState<'MALE' | 'FEMALE'>('MALE');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -52,7 +47,6 @@ export default function RegisterPage() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('US');
   const [selectedSubdivision, setSelectedSubdivision] = useState('New York');
   const [selectedCity, setSelectedCity] = useState('New York City');
-  const [selectedThana, setSelectedThana] = useState('');
   const [customSubdivision, setCustomSubdivision] = useState('');
   const [customCity, setCustomCity] = useState('');
 
@@ -84,7 +78,7 @@ export default function RegisterPage() {
     return [];
   }, [selectedCountryCode]);
 
-  // Cities options based on country & selected subdivision
+  // Cities/Districts options based on country & selected subdivision
   const cities = useMemo(() => {
     if (selectedCountryCode === 'US') {
       const match = US_STATES.find((s) => s.name === selectedSubdivision || s.code === selectedSubdivision);
@@ -109,25 +103,15 @@ export default function RegisterPage() {
     return [];
   }, [selectedCountryCode, selectedSubdivision]);
 
-  // Thanas options (Bangladesh specific)
-  const thanas = useMemo(() => {
-    if (selectedCountryCode !== 'BD') return [];
-    const divMatch = BANGLADESH_DIVISIONS.find((d) => d.division === selectedSubdivision);
-    if (!divMatch) return [];
-    const distMatch = divMatch.districts.find((d) => d.name === selectedCity);
-    return distMatch ? distMatch.thanas : [];
-  }, [selectedCountryCode, selectedSubdivision, selectedCity]);
-
   // Handle Country Change
   const handleCountryChange = (countryCode: string) => {
     setSelectedCountryCode(countryCode);
     if (countryCode === 'US') {
       setSelectedSubdivision('New York');
-      setSelectedCity('New York City');
+      setSelectedCity('New York City (Manhattan)');
     } else if (countryCode === 'BD') {
       setSelectedSubdivision('Dhaka');
       setSelectedCity('Dhaka');
-      setSelectedThana('Dhanmondi');
     } else if (countryCode === 'CA') {
       setSelectedSubdivision('Ontario');
       setSelectedCity('Toronto');
@@ -145,10 +129,25 @@ export default function RegisterPage() {
     }
   };
 
-  // Handle Gender Change
-  const handleGenderChange = (newGender: 'FEMALE' | 'MALE') => {
-    setGender(newGender);
-    setLookingFor(newGender === 'FEMALE' ? 'MALE' : 'FEMALE');
+  // Handle Subdivision Change
+  const handleSubdivisionChange = (subdivisionName: string) => {
+    setSelectedSubdivision(subdivisionName);
+    if (selectedCountryCode === 'US') {
+      const match = US_STATES.find((s) => s.name === subdivisionName || s.code === subdivisionName);
+      if (match && match.cities.length > 0) setSelectedCity(match.cities[0]);
+    } else if (selectedCountryCode === 'BD') {
+      const match = BANGLADESH_DIVISIONS.find((d) => d.division === subdivisionName);
+      if (match && match.districts.length > 0) setSelectedCity(match.districts[0].name);
+    } else if (selectedCountryCode === 'CA') {
+      const match = CANADA_PROVINCES.find((p) => p.name === subdivisionName || p.code === subdivisionName);
+      if (match && match.cities.length > 0) setSelectedCity(match.cities[0]);
+    } else if (selectedCountryCode === 'GB') {
+      const match = UK_REGIONS.find((r) => r.name === subdivisionName || r.code === subdivisionName);
+      if (match && match.cities.length > 0) setSelectedCity(match.cities[0]);
+    } else if (selectedCountryCode === 'AU') {
+      const match = AUSTRALIA_STATES.find((s) => s.name === subdivisionName || s.code === subdivisionName);
+      if (match && match.cities.length > 0) setSelectedCity(match.cities[0]);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -172,17 +171,12 @@ export default function RegisterPage() {
       return;
     }
 
-    // Determine final location values
     const finalState = currentCountry.hasSubdivisions ? selectedSubdivision : customSubdivision;
-    const finalCity = currentCountry.hasSubdivisions
-      ? selectedCountryCode === 'BD' && selectedThana
-        ? `${selectedThana}, ${selectedCity}`
-        : selectedCity
-      : customCity;
+    const finalCity = currentCountry.hasSubdivisions ? selectedCity : customCity;
     const fullPhone = `${dialCode} ${cleanPhone}`;
+    const lookingFor = gender === 'FEMALE' ? 'MALE' : 'FEMALE';
 
     try {
-      // 1. Send registration to Next.js API / PostgreSQL
       const serverRes = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,15 +198,13 @@ export default function RegisterPage() {
       const serverData = await serverRes.json();
 
       if (serverRes.ok && serverData.success) {
-        // Also register with client Firebase for real-time capabilities
         try {
           const assignedRole = adminPasscode.trim() === 'MB-ADMIN-2026' ? 'SUPER_ADMIN' : 'MEMBER';
           await firebaseRegister(emailTrimmed, password, fullNameTrimmed, gender, assignedRole);
         } catch {
-          // Secondary sync
+          // Secondary fallback
         }
 
-        // Redirect newly registered member to dashboard with standard Free status
         if (serverData.user?.role === 'SUPER_ADMIN') {
           window.location.href = '/admin?welcome=admin';
         } else {
@@ -221,10 +213,10 @@ export default function RegisterPage() {
         return;
       }
 
-      setRegError(serverData.error || 'Registration failed. Please check your information and try again.');
+      setRegError(serverData.error || 'Registration failed. Please try again.');
       setIsSubmitting(false);
     } catch {
-      setRegError('Network error during registration. Please verify your connection and try again.');
+      setRegError('Network error during registration. Please verify your connection.');
       setIsSubmitting(false);
     }
   };
@@ -235,246 +227,243 @@ export default function RegisterPage() {
         minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        background: 'radial-gradient(ellipse at top, #EDFDF5 0%, #F4F7FA 70%)',
+        background: 'radial-gradient(ellipse at top, #EDFDF5 0%, #F4F7FA 75%)',
       }}
     >
-      {/* 1. Official Platform Header */}
       <AppHeader />
 
-      {/* 2. Main Executive 2-Column Registration Workspace */}
       <main
         style={{
           flex: 1,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '48px 24px',
+          padding: '40px 20px',
         }}
       >
         <div
           style={{
-            maxWidth: 1140,
-            margin: '0 auto',
             width: '100%',
+            maxWidth: 1000,
+            margin: '0 auto',
+            borderRadius: 24,
+            overflow: 'hidden',
+            boxShadow: '0 25px 60px -15px rgba(6, 78, 59, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.06)',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: 40,
-            alignItems: 'start',
+            gridTemplateColumns: 'minmax(320px, 1fr) minmax(420px, 1.25fr)',
+            background: '#FFFFFF',
           }}
+          className="auth-unified-card"
         >
           {/* ============================================================
-              LEFT COLUMN: PLATFORM MEMBERSHIP BENEFITS & PILLARS
+              LEFT PANEL: UNIFIED DARK EMERALD BRAND SHOWCASE
              ============================================================ */}
           <div
             style={{
+              background: 'linear-gradient(150deg, #064E3B 0%, #043D2E 45%, #022C22 100%)',
+              padding: '40px 32px',
+              color: '#FFFFFF',
               display: 'flex',
               flexDirection: 'column',
-              gap: 24,
-              padding: '16px 8px',
+              justifyContent: 'space-between',
+              position: 'relative',
+              overflow: 'hidden',
             }}
           >
-            <div>
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 14px',
-                  borderRadius: 30,
-                  background: '#ECFDF5',
-                  border: '1px solid #A7F3D0',
-                  color: '#047857',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  marginBottom: 16,
-                }}
-              >
-                <Sparkles size={15} />
-                <span>Free Member Registration</span>
-              </div>
-
-              <h1
-                style={{
-                  fontSize: '2.25rem',
-                  fontWeight: 800,
-                  color: '#0F172A',
-                  lineHeight: 1.25,
-                  margin: '0 0 12px 0',
-                  letterSpacing: '-0.02em',
-                }}
-              >
-                Join Over 15,400 Practicing Muslims Worldwide
-              </h1>
-
-              <p
-                style={{
-                  fontSize: '1rem',
-                  color: '#475569',
-                  lineHeight: 1.6,
-                  margin: 0,
-                }}
-              >
-                Create your matrimonial profile today. Browse verified biodatas across North America, the UK, Australia, and Bangladesh with complete privacy and zero casual dating.
-              </p>
-            </div>
-
-            {/* 4 Feature Highlights */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  background: '#FFFFFF',
-                  padding: '14px 16px',
-                  borderRadius: 14,
-                  border: '1px solid rgba(226, 232, 240, 0.9)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: '#ECFDF5',
-                    color: '#059669',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <BookOpen size={20} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0F172A' }}>
-                    Comprehensive 85+ Attribute Biodatas
-                  </h4>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748B', lineHeight: 1.4 }}>
-                    Religious practice, Mazhab, prayers, educational degrees, profession, and family background clearly outlined.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  background: '#FFFFFF',
-                  padding: '14px 16px',
-                  borderRadius: 14,
-                  border: '1px solid rgba(226, 232, 240, 0.9)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: '#FEF2F2',
-                    color: '#DC2626',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Shield size={20} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0F172A' }}>
-                    Purdah Modesty Photo Shield
-                  </h4>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748B', lineHeight: 1.4 }}>
-                    Choose to blur your photos with server-side 24px Gaussian blur until both families mutually agree to view.
-                  </p>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  background: '#FFFFFF',
-                  padding: '14px 16px',
-                  borderRadius: 14,
-                  border: '1px solid rgba(226, 232, 240, 0.9)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: '#EFF6FF',
-                    color: '#2563EB',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Globe size={20} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#0F172A' }}>
-                    USA & International Diaspora Communities
-                  </h4>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748B', lineHeight: 1.4 }}>
-                    Find practicing suitors living in New York, Texas, California, Chicago, Toronto, London, Sydney, or Dhaka.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Free Membership Guarantee Box */}
+            {/* Background vector rings */}
             <div
               style={{
-                background: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: 14,
-                padding: '16px 18px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
+                position: 'absolute',
+                bottom: -50,
+                right: -50,
+                width: 220,
+                height: 220,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%)',
+                pointerEvents: 'none',
               }}
-            >
-              <CheckCircle2 size={22} style={{ color: '#059669', flexShrink: 0 }} />
-              <div style={{ fontSize: '0.825rem', color: '#334155', lineHeight: 1.5 }}>
-                <strong>No Mandatory Upgrades:</strong> Registration is free. You can create your complete biodata, search profiles, and choose a subscription tier later if you wish.
+            />
+            <div
+              style={{
+                position: 'absolute',
+                top: -30,
+                left: -30,
+                width: 170,
+                height: 170,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(52, 211, 153, 0.1) 0%, transparent 70%)',
+                pointerEvents: 'none',
+              }}
+            />
+
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              {/* Logo in Clean White Pill */}
+              <div style={{ marginBottom: 26 }}>
+                <Link href="/" style={{ display: 'inline-flex', textDecoration: 'none' }}>
+                  <div
+                    style={{
+                      background: '#FFFFFF',
+                      padding: '8px 16px',
+                      borderRadius: 12,
+                      boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <img
+                      src="/logo.png"
+                      alt="Marriage Media USA"
+                      style={{ height: 32, width: 'auto', objectFit: 'contain', display: 'block' }}
+                    />
+                  </div>
+                </Link>
               </div>
+
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6EE7B7', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Join Our Matrimonial Network
+              </div>
+
+              <h1 style={{ fontSize: '1.85rem', fontWeight: 800, lineHeight: 1.25, margin: '0 0 12px 0', letterSpacing: '-0.02em' }}>
+                Complete half your deen with peace of mind
+              </h1>
+
+              <p style={{ fontSize: '0.875rem', color: '#D1FAE5', lineHeight: 1.55, margin: '0 0 26px 0', opacity: 0.9 }}>
+                Join over 15,400 practicing Muslim brothers and sisters with comprehensive 85+ attribute biodatas and zero casual dating.
+              </p>
+
+              {/* 3 Translucent Feature Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    backdropFilter: 'blur(8px)',
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 9,
+                      background: 'rgba(16, 185, 129, 0.25)',
+                      color: '#34D399',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <BookOpen size={18} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.825rem', fontWeight: 700, color: '#FFFFFF' }}>
+                      Comprehensive 85+ Attributes
+                    </div>
+                    <div style={{ fontSize: '0.725rem', color: '#A7F3D0', marginTop: 1 }}>
+                      Deen, Mazhab, prayers, education, and career details
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    backdropFilter: 'blur(8px)',
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 9,
+                      background: 'rgba(239, 68, 68, 0.25)',
+                      color: '#F87171',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Shield size={18} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.825rem', fontWeight: 700, color: '#FFFFFF' }}>
+                      Purdah Modesty Photo Shield
+                    </div>
+                    <div style={{ fontSize: '0.725rem', color: '#A7F3D0', marginTop: 1 }}>
+                      Blurred by default with 24px Gaussian filter
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    backdropFilter: 'blur(8px)',
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 9,
+                      background: 'rgba(59, 130, 246, 0.25)',
+                      color: '#60A5FA',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <CheckCircle2 size={18} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.825rem', fontWeight: 700, color: '#FFFFFF' }}>
+                      Free Member Registration
+                    </div>
+                    <div style={{ fontSize: '0.725rem', color: '#A7F3D0', marginTop: 1 }}>
+                      Explore profiles and upgrade packages anytime
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '0.725rem', color: 'rgba(209, 250, 229, 0.65)', marginTop: 20, position: 'relative', zIndex: 1 }}>
+              Marriage Media USA • Sacred Matrimonial Portal
             </div>
           </div>
 
           {/* ============================================================
-              RIGHT COLUMN: REGISTRATION CARD WITH CASCADING GEO
+              RIGHT PANEL: COMPACT, HIGH-DENSITY REGISTRATION FORM
              ============================================================ */}
           <div
-            className="card-3d"
             style={{
               background: '#FFFFFF',
-              borderRadius: 20,
-              padding: '36px 32px',
-              boxShadow: '0 20px 45px -10px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(226, 232, 240, 0.8)',
-              width: '100%',
+              padding: '30px 28px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
             }}
           >
-            {/* Card Header */}
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Create Free Account
-              </h2>
-              <p style={{ fontSize: '0.85rem', color: '#64748B', marginTop: 4, margin: 0 }}>
-                Join the sacred matrimonial network in under 2 minutes
-              </p>
-            </div>
-
-            {/* Switch Tab: Sign In vs Create Account */}
+            {/* Switcher Tab: Sign In vs Create Account */}
             <div
               style={{
                 display: 'grid',
@@ -482,23 +471,24 @@ export default function RegisterPage() {
                 background: '#F1F5F9',
                 borderRadius: 12,
                 padding: 4,
-                marginBottom: 20,
+                marginBottom: 14,
+                border: '1px solid #E2E8F0',
               }}
             >
               <Link
                 href="/login"
                 style={{
-                  padding: '10px 16px',
+                  padding: '8px 14px',
                   borderRadius: 9,
                   textAlign: 'center',
                   color: '#64748B',
                   fontWeight: 700,
-                  fontSize: '0.875rem',
+                  fontSize: '0.825rem',
                   textDecoration: 'none',
-                  transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  transition: 'all 0.2s ease',
                 }}
               >
                 Sign In
@@ -506,19 +496,31 @@ export default function RegisterPage() {
               <button
                 type="button"
                 style={{
-                  padding: '10px 16px',
+                  padding: '8px 14px',
                   borderRadius: 9,
                   background: '#FFFFFF',
                   color: '#065F46',
                   fontWeight: 800,
-                  fontSize: '0.875rem',
+                  fontSize: '0.825rem',
                   border: 'none',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
                   cursor: 'default',
                 }}
               >
                 Create Account
               </button>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: '0.725rem', fontWeight: 800, color: '#059669', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 2 }}>
+                Member Registration
+              </div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                Create your account
+              </h2>
+              <p style={{ fontSize: '0.785rem', color: '#64748B', marginTop: 2, margin: 0 }}>
+                Quick, free registration for practicing Muslims
+              </p>
             </div>
 
             {/* Error Alert */}
@@ -527,560 +529,379 @@ export default function RegisterPage() {
                 style={{
                   background: '#FFF1F2',
                   border: '1px solid #FECDD3',
-                  borderRadius: 12,
-                  padding: '12px 14px',
+                  borderRadius: 8,
+                  padding: '8px 12px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
-                  fontSize: '0.85rem',
+                  gap: 8,
+                  fontSize: '0.785rem',
                   color: '#BE123C',
-                  marginBottom: 18,
+                  marginBottom: 12,
                 }}
               >
-                <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
                 <span>{regError}</span>
               </div>
             )}
 
-            {/* Registration Form */}
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Profile Created For */}
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>
-                  Creating Profile For
-                </label>
-                <select
-                  value={profileCreatedFor}
-                  onChange={(e) => setProfileCreatedFor(e.target.value)}
-                  className="input-3d"
-                  style={{
-                    padding: '11px 14px',
-                    borderRadius: 12,
-                    border: '1.5px solid #CBD5E1',
-                    fontSize: '0.9rem',
-                    outline: 'none',
-                    background: '#FFFFFF',
-                    color: '#0F172A',
-                  }}
-                >
-                  <option value="Self">Self (My own biodata)</option>
-                  <option value="Son">Son</option>
-                  <option value="Daughter">Daughter</option>
-                  <option value="Brother">Brother</option>
-                  <option value="Sister">Sister</option>
-                  <option value="Friend / Relative">Friend / Relative</option>
-                </select>
-              </div>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+              {/* Row 1: Profile For (Left) + Candidate Gender (Right) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
+                    Profile Created For
+                  </label>
+                  <select
+                    value={profileCreatedFor}
+                    onChange={(e) => setProfileCreatedFor(e.target.value)}
+                    style={{
+                      height: 36,
+                      padding: '0 10px',
+                      borderRadius: 8,
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '0.8rem',
+                      outline: 'none',
+                      background: '#FFFFFF',
+                      color: '#0F172A',
+                    }}
+                  >
+                    <option value="Self">Self (My own)</option>
+                    <option value="Son">Son</option>
+                    <option value="Daughter">Daughter</option>
+                    <option value="Brother">Brother</option>
+                    <option value="Sister">Sister</option>
+                    <option value="Relative">Relative</option>
+                  </select>
+                </div>
 
-              {/* Gender & Seeking Toggle Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
                     Candidate Gender
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, height: 36 }}>
                     <button
                       type="button"
-                      onClick={() => handleGenderChange('FEMALE')}
+                      onClick={() => setGender('FEMALE')}
                       style={{
-                        padding: '10px 6px',
-                        borderRadius: 10,
+                        borderRadius: 8,
                         border: gender === 'FEMALE' ? '2px solid #059669' : '1.5px solid #CBD5E1',
                         background: gender === 'FEMALE' ? '#ECFDF5' : '#FFFFFF',
                         color: gender === 'FEMALE' ? '#047857' : '#475569',
                         fontWeight: 700,
-                        fontSize: '0.825rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer',
-                        textAlign: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
                       }}
                     >
                       🧕 Bride
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleGenderChange('MALE')}
+                      onClick={() => setGender('MALE')}
                       style={{
-                        padding: '10px 6px',
-                        borderRadius: 10,
+                        borderRadius: 8,
                         border: gender === 'MALE' ? '2px solid #059669' : '1.5px solid #CBD5E1',
                         background: gender === 'MALE' ? '#ECFDF5' : '#FFFFFF',
                         color: gender === 'MALE' ? '#047857' : '#475569',
                         fontWeight: 700,
-                        fontSize: '0.825rem',
+                        fontSize: '0.75rem',
                         cursor: 'pointer',
-                        textAlign: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
                       }}
                     >
                       🧔 Groom
                     </button>
                   </div>
                 </div>
+              </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>
-                    Seeking Partner
+              {/* Row 2: Full Legal Name (Left) + Email Address (Right) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
+                    Full Legal Name
                   </label>
-                  <div
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      background: '#F8FAFC',
-                      border: '1.5px solid #E2E8F0',
-                      color: '#0F172A',
-                      fontWeight: 700,
-                      fontSize: '0.825rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      height: 42,
-                    }}
-                  >
-                    <Heart size={14} style={{ color: '#059669' }} />
-                    <span>{lookingFor === 'MALE' ? '🧔 Groom (Brother)' : '🧕 Bride (Sister)'}</span>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      name="fullName"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Enter candidate's name"
+                      style={{
+                        width: '100%',
+                        height: 36,
+                        padding: '0 10px 0 32px',
+                        borderRadius: 8,
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '0.8rem',
+                        outline: 'none',
+                        background: '#FFFFFF',
+                        color: '#0F172A',
+                      }}
+                    />
+                    <User size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
+                    Email Address
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="email"
+                      name="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Enter email address"
+                      style={{
+                        width: '100%',
+                        height: 36,
+                        padding: '0 10px 0 32px',
+                        borderRadius: 8,
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '0.8rem',
+                        outline: 'none',
+                        background: '#FFFFFF',
+                        color: '#0F172A',
+                      }}
+                    />
+                    <Mail size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
                   </div>
                 </div>
               </div>
 
-              {/* Full Legal Name */}
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>
-                  Full Legal Name
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    name="fullName"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Enter candidate's full legal name"
-                    className="input-3d"
-                    style={{
-                      width: '100%',
-                      padding: '11px 14px 11px 40px',
-                      borderRadius: 12,
-                      border: '1.5px solid #CBD5E1',
-                      fontSize: '0.9rem',
-                      outline: 'none',
-                      background: '#FFFFFF',
-                      color: '#0F172A',
-                    }}
-                  />
-                  <User
-                    size={17}
-                    style={{
-                      position: 'absolute',
-                      left: 14,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: '#94A3B8',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Email Address */}
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>
-                  Email Address
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="email"
-                    name="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter email address"
-                    className="input-3d"
-                    style={{
-                      width: '100%',
-                      padding: '11px 14px 11px 40px',
-                      borderRadius: 12,
-                      border: '1.5px solid #CBD5E1',
-                      fontSize: '0.9rem',
-                      outline: 'none',
-                      background: '#FFFFFF',
-                      color: '#0F172A',
-                    }}
-                  />
-                  <Mail
-                    size={17}
-                    style={{
-                      position: 'absolute',
-                      left: 14,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: '#94A3B8',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* ============================================================
-                  CASCADING GEOGRAPHIC LOCATION ENGINE
-                 ============================================================ */}
-              <div
-                style={{
-                  background: '#F8FAFC',
-                  border: '1.5px solid #E2E8F0',
-                  borderRadius: 14,
-                  padding: '14px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <MapPin size={16} style={{ color: '#059669' }} />
-                  <span style={{ fontSize: '0.825rem', fontWeight: 800, color: '#0F172A' }}>
-                    Current Residence & Location
-                  </span>
-                </div>
-
-                {/* Country Dropdown */}
-                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
+              {/* Row 3: Cascading Geolocation (Country, State/Division, City/District) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1fr 1fr', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
                     Country
                   </label>
                   <select
                     value={selectedCountryCode}
                     onChange={(e) => handleCountryChange(e.target.value)}
-                    className="input-3d"
                     style={{
-                      padding: '10px 12px',
-                      borderRadius: 10,
+                      height: 36,
+                      padding: '0 6px',
+                      borderRadius: 8,
                       border: '1.5px solid #CBD5E1',
-                      fontSize: '0.875rem',
+                      fontSize: '0.785rem',
+                      outline: 'none',
                       background: '#FFFFFF',
                       color: '#0F172A',
                     }}
                   >
                     {COUNTRIES.map((c) => (
                       <option key={c.code} value={c.code}>
-                        {c.flag} {c.name} ({c.dialCode})
+                        {c.flag} {c.name}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* State / Division and City / District Grid */}
-                {currentCountry.hasSubdivisions ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    {/* Subdivision (State / Division / Province) */}
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
-                        {currentCountry.subdivisionLabel}
-                      </label>
-                      <select
-                        value={selectedSubdivision}
-                        onChange={(e) => {
-                          setSelectedSubdivision(e.target.value);
-                          if (selectedCountryCode === 'BD') {
-                            const div = BANGLADESH_DIVISIONS.find((d) => d.division === e.target.value);
-                            if (div && div.districts.length > 0) {
-                              setSelectedCity(div.districts[0].name);
-                              setSelectedThana(div.districts[0].thanas[0] || '');
-                            }
-                          }
-                        }}
-                        className="input-3d"
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          border: '1.5px solid #CBD5E1',
-                          fontSize: '0.85rem',
-                          background: '#FFFFFF',
-                          color: '#0F172A',
-                        }}
-                      >
-                        {subdivisions.map((s) => (
-                          <option key={s.code || s.name} value={s.name}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* City or District */}
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
-                        {selectedCountryCode === 'BD' ? 'District' : 'City / Metropolitan Area'}
-                      </label>
-                      <select
-                        value={selectedCity}
-                        onChange={(e) => {
-                          setSelectedCity(e.target.value);
-                          if (selectedCountryCode === 'BD') {
-                            const div = BANGLADESH_DIVISIONS.find((d) => d.division === selectedSubdivision);
-                            const dist = div?.districts.find((d) => d.name === e.target.value);
-                            setSelectedThana(dist?.thanas[0] || '');
-                          }
-                        }}
-                        className="input-3d"
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          border: '1.5px solid #CBD5E1',
-                          fontSize: '0.85rem',
-                          background: '#FFFFFF',
-                          color: '#0F172A',
-                        }}
-                      >
-                        {cities.map((city) => (
-                          <option key={city} value={city}>
-                            {city}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                ) : (
-                  /* Custom text inputs for countries without static catalog */
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
-                        State / Province / Region
-                      </label>
-                      <input
-                        type="text"
-                        value={customSubdivision}
-                        onChange={(e) => setCustomSubdivision(e.target.value)}
-                        placeholder="Enter state or region"
-                        className="input-3d"
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          border: '1.5px solid #CBD5E1',
-                          fontSize: '0.85rem',
-                          background: '#FFFFFF',
-                          color: '#0F172A',
-                        }}
-                      />
-                    </div>
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
-                        City / Municipality
-                      </label>
-                      <input
-                        type="text"
-                        value={customCity}
-                        onChange={(e) => setCustomCity(e.target.value)}
-                        placeholder="Enter city"
-                        className="input-3d"
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          border: '1.5px solid #CBD5E1',
-                          fontSize: '0.85rem',
-                          background: '#FFFFFF',
-                          color: '#0F172A',
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Bangladesh Thana / Upazila (Only if BD) */}
-                {selectedCountryCode === 'BD' && thanas.length > 0 && (
-                  <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>
-                      Thana / Upazila
-                    </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
+                    {currentCountry.hasSubdivisions ? currentCountry.subdivisionLabel : 'State / Region'}
+                  </label>
+                  {currentCountry.hasSubdivisions ? (
                     <select
-                      value={selectedThana}
-                      onChange={(e) => setSelectedThana(e.target.value)}
-                      className="input-3d"
+                      value={selectedSubdivision}
+                      onChange={(e) => handleSubdivisionChange(e.target.value)}
                       style={{
-                        padding: '10px 12px',
-                        borderRadius: 10,
+                        height: 36,
+                        padding: '0 6px',
+                        borderRadius: 8,
                         border: '1.5px solid #CBD5E1',
-                        fontSize: '0.85rem',
+                        fontSize: '0.785rem',
+                        outline: 'none',
                         background: '#FFFFFF',
                         color: '#0F172A',
                       }}
                     >
-                      {thanas.map((th) => (
-                        <option key={th} value={th}>
-                          {th}
+                      {subdivisions.map((s) => (
+                        <option key={s.code || s.name} value={s.name}>
+                          {s.name}
                         </option>
                       ))}
                     </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Phone Number with Auto-Dial Code Prefix */}
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>
-                  Phone Number
-                </label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div
-                    style={{
-                      padding: '11px 14px',
-                      background: '#F1F5F9',
-                      border: '1.5px solid #CBD5E1',
-                      borderRadius: 12,
-                      fontWeight: 700,
-                      fontSize: '0.9rem',
-                      color: '#0F172A',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      flexShrink: 0,
-                    }}
-                  >
-                    <span>{currentCountry.flag}</span>
-                    <span>{dialCode}</span>
-                  </div>
-                  <div style={{ position: 'relative', flex: 1 }}>
+                  ) : (
                     <input
-                      type="tel"
-                      name="phoneNumber"
-                      required
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="Enter phone number"
-                      className="input-3d"
+                      type="text"
+                      value={customSubdivision}
+                      onChange={(e) => setCustomSubdivision(e.target.value)}
+                      placeholder="State / Region"
                       style={{
-                        width: '100%',
-                        padding: '11px 14px 11px 38px',
-                        borderRadius: 12,
+                        height: 36,
+                        padding: '0 8px',
+                        borderRadius: 8,
                         border: '1.5px solid #CBD5E1',
-                        fontSize: '0.9rem',
+                        fontSize: '0.785rem',
                         outline: 'none',
                         background: '#FFFFFF',
                         color: '#0F172A',
                       }}
                     />
-                    <Phone
-                      size={17}
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
+                    {selectedCountryCode === 'BD' ? 'District' : 'City'}
+                  </label>
+                  {currentCountry.hasSubdivisions && cities.length > 0 ? (
+                    <select
+                      value={selectedCity}
+                      onChange={(e) => setSelectedCity(e.target.value)}
                       style={{
-                        position: 'absolute',
-                        left: 12,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        color: '#94A3B8',
+                        height: 36,
+                        padding: '0 6px',
+                        borderRadius: 8,
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '0.785rem',
+                        outline: 'none',
+                        background: '#FFFFFF',
+                        color: '#0F172A',
+                      }}
+                    >
+                      {cities.map((city) => (
+                        <option key={city} value={city}>
+                          {city}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={customCity}
+                      onChange={(e) => setCustomCity(e.target.value)}
+                      placeholder="City / Area"
+                      style={{
+                        height: 36,
+                        padding: '0 8px',
+                        borderRadius: 8,
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '0.785rem',
+                        outline: 'none',
+                        background: '#FFFFFF',
+                        color: '#0F172A',
                       }}
                     />
+                  )}
+                </div>
+              </div>
+
+              {/* Row 4: Phone Number with Dial Code (Left) + Password (Right) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
+                    Phone Number
+                  </label>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <div
+                      style={{
+                        height: 36,
+                        padding: '0 6px',
+                        background: '#F1F5F9',
+                        border: '1.5px solid #CBD5E1',
+                        borderRadius: 8,
+                        fontWeight: 700,
+                        fontSize: '0.75rem',
+                        color: '#0F172A',
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span>{dialCode}</span>
+                    </div>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input
+                        type="tel"
+                        name="phoneNumber"
+                        required
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        placeholder="Phone number"
+                        style={{
+                          width: '100%',
+                          height: 36,
+                          padding: '0 8px 0 26px',
+                          borderRadius: 8,
+                          border: '1.5px solid #CBD5E1',
+                          fontSize: '0.8rem',
+                          outline: 'none',
+                          background: '#FFFFFF',
+                          color: '#0F172A',
+                        }}
+                      />
+                      <Phone size={13} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Password */}
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1E293B' }}>
-                  Password
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a secure password (min 6 characters)"
-                    className="input-3d"
-                    style={{
-                      width: '100%',
-                      padding: '11px 40px 11px 38px',
-                      borderRadius: 12,
-                      border: '1.5px solid #CBD5E1',
-                      fontSize: '0.9rem',
-                      outline: 'none',
-                      background: '#FFFFFF',
-                      color: '#0F172A',
-                    }}
-                  />
-                  <Lock
-                    size={17}
-                    style={{
-                      position: 'absolute',
-                      left: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: '#94A3B8',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#94A3B8',
-                      cursor: 'pointer',
-                      padding: 4,
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Administrative Passcode Drawer (Expandable) */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowAdminPasscode(!showAdminPasscode)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    fontSize: '0.75rem',
-                    color: '#64748B',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontWeight: 600,
-                  }}
-                >
-                  <KeyRound size={13} />
-                  <span>Have an administrative authorization passcode?</span>
-                </button>
-
-                {showAdminPasscode && (
-                  <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: '#1E293B' }}>
+                    Password
+                  </label>
+                  <div style={{ position: 'relative' }}>
                     <input
-                      type="password"
-                      name="adminPasscode"
-                      value={adminPasscode}
-                      onChange={(e) => setAdminPasscode(e.target.value)}
-                      placeholder="Enter administrator authorization code"
-                      className="input-3d"
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min 6 characters"
                       style={{
                         width: '100%',
-                        padding: '9px 12px',
-                        borderRadius: 10,
+                        height: 36,
+                        padding: '0 28px 0 28px',
+                        borderRadius: 8,
                         border: '1.5px solid #CBD5E1',
-                        fontSize: '0.825rem',
-                        background: '#FFFBEB',
-                        color: '#92400E',
+                        fontSize: '0.8rem',
+                        outline: 'none',
+                        background: '#FFFFFF',
+                        color: '#0F172A',
                       }}
                     />
+                    <Lock size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94A3B8',
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* Terms and Halal Certification Checkbox */}
+              {/* Row 5: Single Compact Line Checkbox */}
               <label
                 style={{
                   display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 10,
-                  fontSize: '0.785rem',
+                  alignItems: 'center',
+                  gap: 7,
+                  fontSize: '0.725rem',
                   color: '#475569',
-                  lineHeight: 1.4,
                   cursor: 'pointer',
                   marginTop: 2,
                 }}
@@ -1090,11 +911,9 @@ export default function RegisterPage() {
                   required
                   checked={agreedToTerms}
                   onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  style={{ accentColor: '#059669', width: 16, height: 16, marginTop: 2 }}
+                  style={{ accentColor: '#059669', width: 14, height: 14 }}
                 />
-                <span>
-                  I affirm that all information provided is accurate and that I am registering with sincere intentions for blessed Islamic marriage (Nikkah).
-                </span>
+                <span>I affirm sincere intentions for blessed Islamic marriage (Nikkah).</span>
               </label>
 
               {/* Submit Button */}
@@ -1104,53 +923,81 @@ export default function RegisterPage() {
                 className="btn-3d"
                 style={{
                   width: '100%',
-                  padding: '14px',
-                  fontSize: '0.95rem',
+                  height: 40,
+                  fontSize: '0.875rem',
                   fontWeight: 800,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 8,
+                  gap: 6,
                   cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   opacity: isSubmitting ? 0.75 : 1,
-                  marginTop: 6,
+                  marginTop: 2,
                 }}
               >
                 {isSubmitting ? (
                   'Creating Account...'
                 ) : (
                   <>
-                    Create Free Account & Continue <ArrowRight size={18} />
+                    Create Free Account <ArrowRight size={15} />
                   </>
                 )}
               </button>
             </form>
 
-            {/* Privacy Guarantee Footer */}
-            <div
-              style={{
-                marginTop: 20,
-                paddingTop: 16,
-                borderTop: '1px solid #F1F5F9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                fontSize: '0.75rem',
-                color: '#64748B',
-              }}
-            >
-              <ShieldCheck size={16} style={{ color: '#059669', flexShrink: 0 }} />
-              <span>100% Islamic Purdah & Verified Privacy Guarantee</span>
+            {/* Switch to Sign In */}
+            <div style={{ marginTop: 14, textAlign: 'center', fontSize: '0.775rem', color: '#64748B' }}>
+              Already registered?{' '}
+              <Link href="/login" style={{ color: '#059669', fontWeight: 800, textDecoration: 'none' }}>
+                Sign in
+              </Link>
+            </div>
+
+            {/* Subtle Staff Passcode Toggle */}
+            <div style={{ marginTop: 8, textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setShowAdminPasscode(!showAdminPasscode)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '0.685rem',
+                  color: '#94A3B8',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <KeyRound size={11} /> Have staff passcode?
+              </button>
+              {showAdminPasscode && (
+                <div style={{ marginTop: 6 }}>
+                  <input
+                    type="password"
+                    name="adminPasscode"
+                    value={adminPasscode}
+                    onChange={(e) => setAdminPasscode(e.target.value)}
+                    placeholder="Enter authorization code"
+                    style={{
+                      width: '100%',
+                      height: 32,
+                      padding: '0 8px',
+                      borderRadius: 6,
+                      border: '1px solid #CBD5E1',
+                      fontSize: '0.75rem',
+                      background: '#FFFBEB',
+                      color: '#92400E',
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
       </main>
 
-      {/* 3. Official Platform Footer */}
       <Footer />
-
-      {/* Mobile Floating Bottom Bar */}
       <BottomNav />
     </div>
   );

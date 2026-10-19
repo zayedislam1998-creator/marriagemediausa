@@ -45,6 +45,17 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
   const [editingPkg, setEditingPkg] = useState<any | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
+  React.useEffect(() => {
+    fetch('/api/packages')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.packages) && data.packages.length > 0) {
+          setPkgList(data.packages);
+        }
+      })
+      .catch((e) => console.error('Error fetching live packages in admin:', e));
+  }, []);
+
   // Modal Form State
   const [name, setName] = useState('');
   const [priceUsd, setPriceUsd] = useState('');
@@ -102,7 +113,7 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
   const openCreateModal = () => {
     setEditingPkg(null);
     setName('');
-    setPriceUsd('2500');
+    setPriceUsd('49');
     setDurationMonths('3');
     setContactCredits('50');
     setDailyProfileViewLimit('100');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Users,
@@ -18,6 +18,9 @@ import {
   LogOut,
   LayoutDashboard,
   FolderOpen,
+  Bell,
+  CreditCard,
+  RefreshCw,
 } from 'lucide-react';
 import { AdminMemberRecord, FormBuilderConfigRecord, ProfileRequirementRecord } from '@/db/queries';
 import { SeatMember, AuditLog } from '@/lib/admin/store';
@@ -27,9 +30,10 @@ import { FormStudioTab } from './FormStudioTab';
 import { PricingPackagesTab } from './PricingPackagesTab';
 import { SettingsSecurityTab } from './SettingsSecurityTab';
 import { MediaManagerTab } from './MediaManagerTab';
+import { PaymentGatewaysTab } from './PaymentGatewaysTab';
 import { ProvisionMemberModal } from './ProvisionMemberModal';
 import { useCrossTabSync } from '@/lib/sync/broadcastSync';
-import { firebaseLogout } from '@/lib/firebase/authService';
+import { executeUniversalLogout } from '@/lib/auth/universalLogout';
 
 interface AdminExecutiveLayoutProps {
   adminEmail: string;
@@ -53,19 +57,71 @@ export function AdminExecutiveLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [provisionModalOpen, setProvisionModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'members' | 'forms' | 'packages' | 'kyc' | 'media' | 'analytics' | 'settings'
+    'members' | 'forms' | 'packages' | 'gateways' | 'kyc' | 'media' | 'analytics' | 'settings'
   >('members');
   const [seatActionMsg, setSeatActionMsg] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<{
+    totalMembers: number;
+    totalProfiles: number;
+    verifiedProfiles: number;
+    activeSubscriptions: number;
+    totalRevenue: number;
+    packageBreakdown: Array<{
+      id: number;
+      name: string;
+      priceUsd: number;
+      badgeTitle: string;
+      subscriberCount: number;
+      revenue: number;
+    }>;
+    lastUpdated?: string;
+  } | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch('/api/admin/notifications');
+      const data = await res.json();
+      if (data.success && data.notifications) {
+        setNotifications(data.notifications);
+      }
+    } catch {}
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
+      const res = await fetch('/api/admin/analytics');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.stats) {
+          setAnalyticsData(data.stats);
+        }
+      }
+    } catch (err) {
+      console.warn('Analytics fetch error:', err);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    fetchAnalytics();
+  }, []);
 
   // Real-Time Cross-Tab Reactivity Listener
   useCrossTabSync((msg) => {
-    setSeatActionMsg(`✓ Cross-tab event: ${msg.type.replace(/_/g, ' ')} detected!`);
+    setSeatActionMsg(`✓ Real-time event: ${msg.type.replace(/_/g, ' ')} detected!`);
+    fetchNotifications();
+    fetchAnalytics();
     setTimeout(() => setSeatActionMsg(null), 4000);
   });
 
   const handleSignOut = async () => {
-    await firebaseLogout();
-    window.location.href = '/admin';
+    await executeUniversalLogout('/login?logged_out=1');
   };
 
   const navItems = [
@@ -92,6 +148,14 @@ export function AdminExecutiveLayout({
       icon: Award,
       badge: `${initialPackages.length} Tiers`,
       badgeColor: 'var(--sapphire-600)',
+    },
+    {
+      id: 'gateways' as const,
+      label: 'Payment Gateways',
+      shortLabel: 'Gateways',
+      icon: CreditCard,
+      badge: 'Stripe & PayPal',
+      badgeColor: '#6366F1',
     },
     {
       id: 'kyc' as const,
@@ -335,68 +399,131 @@ export function AdminExecutiveLayout({
           })}
         </nav>
 
-        {/* Sidebar Footer */}
+        {/* Sidebar Footer with Clean 2-Row Stacked Layout */}
         <div
           style={{
-            padding: isCollapsed ? '14px 8px' : '16px 18px',
+            padding: isCollapsed ? '14px 8px' : '14px 16px',
             borderTop: '1px solid #1E293B',
+            background: 'rgba(15, 23, 42, 0.98)',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: isCollapsed ? 'center' : 'space-between',
+            flexDirection: 'column',
+            gap: 10,
+            flexShrink: 0,
           }}
         >
-          {!isCollapsed && (
-            <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#F8FAFC', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                {adminEmail}
+          {!isCollapsed ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      color: '#F8FAFC',
+                      textOverflow: 'ellipsis',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={adminEmail}
+                  >
+                    {adminEmail}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
+                    <span style={{ fontSize: '0.675rem', color: '#34D399', fontWeight: 700 }}>
+                      Super Admin Active
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: '0.6875rem', color: '#10B981', fontWeight: 600 }}>
-                Super Admin Active
+
+              {/* Action Buttons: Member Portal & Sign Out */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <Link
+                  href="/dashboard"
+                  style={{
+                    color: '#94A3B8',
+                    textDecoration: 'none',
+                    padding: '7px 8px',
+                    borderRadius: 8,
+                    background: '#1E293B',
+                    border: '1px solid #334155',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                    fontSize: '0.725rem',
+                    fontWeight: 700,
+                    transition: 'all 0.15s ease',
+                  }}
+                  title="Switch to Member Dashboard View"
+                >
+                  <LayoutDashboard size={13} />
+                  <span>Member View</span>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  style={{
+                    color: '#F87171',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    padding: '7px 8px',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                    fontSize: '0.725rem',
+                    fontWeight: 700,
+                    transition: 'all 0.15s ease',
+                  }}
+                  title="Sign Out of Admin Console"
+                >
+                  <LogOut size={13} />
+                  <span>Sign Out</span>
+                </button>
               </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+              <Link
+                href="/dashboard"
+                style={{
+                  color: '#94A3B8',
+                  padding: 8,
+                  borderRadius: 8,
+                  background: '#1E293B',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                title="Member View"
+              >
+                <LayoutDashboard size={16} />
+              </Link>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                style={{
+                  color: '#F87171',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: 'none',
+                  padding: 8,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Link
-              href="/dashboard"
-              style={{
-                color: '#94A3B8',
-                textDecoration: 'none',
-                padding: '6px 10px',
-                borderRadius: 8,
-                background: '#1E293B',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                fontSize: '0.725rem',
-                fontWeight: 700,
-              }}
-              title="Switch to Member Dashboard View"
-            >
-              <LayoutDashboard size={13} />
-              {!isCollapsed && 'Member View'}
-            </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              style={{
-                color: '#F87171',
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                padding: '6px 10px',
-                borderRadius: 8,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                fontSize: '0.725rem',
-                fontWeight: 700,
-              }}
-              title="Sign Out"
-            >
-              <LogOut size={13} />
-              {!isCollapsed && 'Sign Out'}
-            </button>
-          </div>
         </div>
       </aside>
 
@@ -561,16 +688,24 @@ export function AdminExecutiveLayout({
           gap: 22,
         }}
       >
-        {/* Workspace Top Bar Header */}
+        {/* Workspace Top Bar Header (Sticky with Glassmorphism) */}
         <header
           style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 30,
+            background: 'rgba(248, 250, 252, 0.96)',
+            backdropFilter: 'blur(10px)',
+            paddingTop: 14,
+            paddingBottom: 14,
+            marginTop: -24,
+            marginBottom: 2,
+            borderBottom: '1.5px solid var(--border-subtle)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             flexWrap: 'wrap',
             gap: 16,
-            paddingBottom: 16,
-            borderBottom: '1.5px solid var(--border-subtle)',
           }}
         >
           <div>
@@ -596,6 +731,130 @@ export function AdminExecutiveLayout({
             >
               <UserPlus size={15} /> Provision Member
             </button>
+
+            {/* Real-Time Notification Bell Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: '#FFFFFF',
+                  border: '1px solid #E2E8F0',
+                  color: '#334155',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  position: 'relative',
+                }}
+                title="Admin Alerts & Notifications"
+              >
+                <Bell size={16} color={notifications.some((n) => !n.isRead) ? '#059669' : '#64748B'} />
+                {notifications.filter((n) => !n.isRead).length > 0 && (
+                  <span
+                    style={{
+                      background: '#DC2626',
+                      color: '#FFF',
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      borderRadius: 10,
+                      padding: '1px 6px',
+                    }}
+                  >
+                    {notifications.filter((n) => !n.isRead).length}
+                  </span>
+                )}
+              </button>
+
+              {notifDropdownOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: 'calc(100% + 8px)',
+                    width: 320,
+                    maxHeight: 380,
+                    overflowY: 'auto',
+                    background: '#FFFFFF',
+                    borderRadius: 12,
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+                    border: '1px solid #E2E8F0',
+                    padding: 12,
+                    zIndex: 100,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      borderBottom: '1px solid #F1F5F9',
+                      paddingBottom: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0F172A' }}>
+                      Admin Live Notifications
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetch('/api/admin/notifications', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ action: 'mark_all_read' }),
+                        }).then(() => fetchNotifications());
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#059669',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px 10px', color: '#94A3B8', fontSize: '0.8rem' }}>
+                      No new notifications
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            background: n.isRead ? '#F8FAFC' : '#ECFDF5',
+                            border: `1px solid ${n.isRead ? '#E2E8F0' : '#A7F3D0'}`,
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ fontSize: '0.78rem', color: '#0F172A' }}>{n.title}</strong>
+                            <span style={{ fontSize: '0.65rem', color: '#64748B' }}>
+                              {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: '#475569', lineHeight: 1.3 }}>
+                            {n.message}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <Link href="/" className="btn-3d-secondary" style={{ fontSize: '0.8rem', padding: '8px 14px' }}>
               Public Website →
             </Link>
@@ -640,6 +899,11 @@ export function AdminExecutiveLayout({
         {/* VIEW 3: Pricing & Packages (Controlled Scroll, Flexible Durations, Zero Jargon) */}
         {activeTab === 'packages' && (
           <PricingPackagesTab initialPackages={initialPackages} />
+        )}
+
+        {/* VIEW 3.5: Payment Gateways (Stripe & PayPal Configuration and Live Ping Test) */}
+        {activeTab === 'gateways' && (
+          <PaymentGatewaysTab />
         )}
 
         {/* VIEW 4: KYC Verification Desk */}
@@ -689,9 +953,41 @@ export function AdminExecutiveLayout({
           <MediaManagerTab />
         )}
 
-        {/* VIEW 6: Revenue & Analytics */}
+        {/* VIEW 6: Revenue & Analytics (100% Real Live PostgreSQL Aggregates - Zero Mock Data) */}
         {activeTab === 'analytics' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Header with live refresh button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  Financial & Membership Analytics
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  Real-time aggregated telemetry directly from PostgreSQL 16+ database tables. Zero mock data policy enforced.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchAnalytics}
+                disabled={analyticsLoading}
+                className="btn-3d-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '7px 14px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: analyticsLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <RefreshCw size={14} className={analyticsLoading ? 'animate-spin' : ''} />
+                <span>{analyticsLoading ? 'Syncing...' : 'Refresh Live Telemetry'}</span>
+              </button>
+            </div>
+
+            {/* 4 Real Metric Cards */}
             <div
               style={{
                 display: 'grid',
@@ -699,85 +995,106 @@ export function AdminExecutiveLayout({
                 gap: 16,
               }}
             >
-              <div className="card-3d" style={{ padding: 22 }}>
+              <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  Total Platform Revenue (2026)
+                  Total Platform Revenue
                 </div>
                 <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--emerald-600)', marginTop: 6 }}>
-                  $254,000
+                  ${(analyticsData?.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, marginTop: 4 }}>
-                  +32.4% MoM Growth
+                  ✓ Completed Transactions
                 </div>
               </div>
 
-              <div className="card-3d" style={{ padding: 22 }}>
+              <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
                   Active Paid Subscriptions
                 </div>
                 <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--sapphire-600)', marginTop: 6 }}>
-                  74 Clients
+                  {analyticsData?.activeSubscriptions ?? 0} Subscriptions
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 700, marginTop: 4 }}>
-                  +18 Activated this month
+                  ✓ Active in Database
                 </div>
               </div>
 
-              <div className="card-3d" style={{ padding: 22 }}>
+              <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  US Elite Concierge ($6,500)
+                  Registered Members & Biodatas
                 </div>
                 <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--gold-600)', marginTop: 6 }}>
-                  14 VIP Clients
+                  {analyticsData?.totalMembers ?? initialMembers.length} Members
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 700, marginTop: 4 }}>
-                  High Touch Wali Introductions
+                  ✓ Authentic Member Profiles
                 </div>
               </div>
 
-              <div className="card-3d" style={{ padding: 22 }}>
+              <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  Verified Halal Matrimonial Wallets
+                  Verified Halal Profiles
                 </div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--coral-500)', marginTop: 6 }}>
-                  1,420 Users
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#10B981', marginTop: 6 }}>
+                  {analyticsData?.verifiedProfiles ?? 0} Verified
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, marginTop: 4 }}>
-                  Zero Mock Data Policy Enforced
+                  ✓ KYC & Admin Approved
                 </div>
               </div>
             </div>
 
-            <div className="card-3d" style={{ padding: 24 }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0 0 8px 0' }}>
-                Subscription Economic Model Breakdown
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
-                Revenue stream across authentic Marriage Media USA pricing packages ($2k Silver, $3k Gold, $4k Diamond, $6.5k Elite).
-              </p>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-                <div style={{ padding: 14, borderRadius: 12, background: '#F8FAFC', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>Silver ($2,000)</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--sapphire-600)', marginTop: 4 }}>$64,000</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>32 Subscriptions</div>
+            {/* Real Subscription Breakdown by Package */}
+            <div className="card-3d" style={{ padding: 24, background: '#FFFFFF' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0 0 4px 0' }}>
+                    Subscription Economic Model Breakdown
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                    Live distribution stream across authentic database packages in PostgreSQL.
+                  </p>
                 </div>
-                <div style={{ padding: 14, borderRadius: 12, background: '#F8FAFC', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>Gold ($3,000)</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--gold-600)', marginTop: 4 }}>$54,000</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>18 Subscriptions</div>
-                </div>
-                <div style={{ padding: 14, borderRadius: 12, background: '#F8FAFC', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>Diamond ($4,000)</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#8B5CF6', marginTop: 4 }}>$40,000</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>10 Subscriptions</div>
-                </div>
-                <div style={{ padding: 14, borderRadius: 12, background: '#F8FAFC', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>Royal Walima ($6,500)</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--emerald-600)', marginTop: 4 }}>$91,000</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>14 VIP Subscriptions</div>
-                </div>
+                {analyticsData?.lastUpdated && (
+                  <span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>
+                    Updated: {new Date(analyticsData.lastUpdated).toLocaleTimeString()}
+                  </span>
+                )}
               </div>
+
+              {analyticsData?.packageBreakdown && analyticsData.packageBreakdown.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                  {analyticsData.packageBreakdown.map((pkg) => (
+                    <div
+                      key={pkg.id}
+                      style={{
+                        padding: 16,
+                        borderRadius: 12,
+                        background: '#F8FAFC',
+                        border: '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0F172A' }}>{pkg.name}</span>
+                        <span className="badge-3d" style={{ fontSize: '0.65rem' }}>${pkg.priceUsd.toFixed(0)}</span>
+                      </div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--emerald-600)' }}>
+                        ${pkg.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {pkg.subscriberCount} {pkg.subscriberCount === 1 ? 'Subscription' : 'Subscriptions'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: 24, textAlign: 'center', color: '#94A3B8', fontSize: '0.85rem' }}>
+                  Loading real package metrics from database...
+                </div>
+              )}
             </div>
           </div>
         )}

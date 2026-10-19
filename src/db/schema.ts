@@ -44,6 +44,17 @@ export const requestStatusEnum = pgEnum('request_status_enum', ['PENDING', 'APPR
 export const kycDocTypeEnum = pgEnum('kyc_doc_type', ['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE', 'DEGREE_CERTIFICATE']);
 export const kycStatusEnum = pgEnum('kyc_status_enum', ['NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED']);
 export const subscriptionStatusEnum = pgEnum('subscription_status_enum', ['ACTIVE', 'EXPIRED', 'CANCELLED', 'SUSPENDED']);
+export const paymentGatewayEnum = pgEnum('payment_gateway_enum', ['STRIPE', 'PAYPAL']);
+export const gatewayModeEnum = pgEnum('gateway_mode_enum', ['TEST', 'LIVE']);
+export const paymentStatusEnum = pgEnum('payment_status_enum', ['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']);
+export const paymentTypeEnum = pgEnum('payment_type_enum', ['MEMBERSHIP_SUBSCRIPTION', 'WALLET_TOPUP']);
+export const walletTransactionTypeEnum = pgEnum('wallet_transaction_type_enum', [
+  'PACKAGE_ALLOWANCE',
+  'CREDIT_PURCHASE',
+  'CONTACT_UNLOCK_DEBIT',
+  'ADMIN_ADJUSTMENT',
+  'REFUND_REVERSAL',
+]);
 
 // ============================================================================
 // 1. USERS TABLE
@@ -503,6 +514,83 @@ export const formBuilderConfigs = pgTable('form_builder_configs', {
   buttonText: varchar('button_text', { length: 128 }).notNull(),
   fieldsJson: jsonb('fields_json').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ============================================================================
+// 18. PAYMENT GATEWAY CONFIGURATIONS VAULT
+// ============================================================================
+export const paymentGatewaysConfig = pgTable('payment_gateways_config', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  gateway: paymentGatewayEnum('gateway').notNull().unique(), // 'STRIPE' | 'PAYPAL'
+  mode: gatewayModeEnum('mode').default('TEST').notNull(),    // 'TEST' | 'LIVE'
+  isActive: boolean('is_active').default(false).notNull(),
+  publicKey: varchar('public_key', { length: 255 }).notNull(),
+  encryptedSecretKey: text('encrypted_secret_key').notNull(),
+  encryptedWebhookSecret: text('encrypted_webhook_secret').notNull(),
+  webhookId: varchar('webhook_id', { length: 120 }), // PayPal Webhook ID
+  settingsJson: jsonb('settings_json').default({}).notNull(),
+  lastTestedAt: timestamp('last_tested_at', { withTimezone: true }),
+  testStatus: varchar('test_status', { length: 30 }).default('UNTESTED'), // 'SUCCESS' | 'FAILED' | 'UNTESTED'
+  lastTestMessage: text('last_test_message'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ============================================================================
+// 19. PAYMENT TRANSACTIONS LEDGER
+// ============================================================================
+export const paymentTransactions = pgTable(
+  'payment_transactions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    gateway: paymentGatewayEnum('gateway').notNull(),
+    gatewayTransactionId: varchar('gateway_transaction_id', { length: 255 }).notNull().unique(),
+    gatewayEventId: varchar('gateway_event_id', { length: 255 }),
+    amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
+    feeAmount: numeric('fee_amount', { precision: 10, scale: 2 }).default('0.00'),
+    netAmount: numeric('net_amount', { precision: 10, scale: 2 }),
+    currency: varchar('currency', { length: 3 }).default('USD').notNull(),
+    status: paymentStatusEnum('status').default('PENDING').notNull(),
+    paymentType: paymentTypeEnum('payment_type').notNull(), // 'MEMBERSHIP_SUBSCRIPTION' | 'WALLET_TOPUP'
+    packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+    creditsPurchased: integer('credits_purchased').default(0).notNull(),
+    rawPayload: jsonb('raw_payload'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_transactions_user').on(table.userId, table.createdAt),
+    index('idx_transactions_status').on(table.status, table.createdAt),
+  ]
+);
+
+// ============================================================================
+// 20. WALLET DOUBLE-ENTRY LEDGER (CONTACT UNLOCK CREDITS)
+// ============================================================================
+export const walletLedger = pgTable(
+  'wallet_ledger',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    transactionType: walletTransactionTypeEnum('transaction_type').notNull(),
+    amount: integer('amount').notNull(), // Positive for additions, negative for deductions
+    referenceId: uuid('reference_id'),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_wallet_ledger_user').on(table.userId, table.createdAt),
+  ]
+);
+
+// ============================================================================
+// 21. PROCESSED WEBHOOK EVENTS (IDEMPOTENCY LOG)
+// ============================================================================
+export const processedWebhookEvents = pgTable('processed_webhook_events', {
+  eventId: varchar('event_id', { length: 255 }).primaryKey(),
+  gateway: paymentGatewayEnum('gateway').notNull(),
+  eventType: varchar('event_type', { length: 100 }).notNull(),
+  processedAt: timestamp('processed_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 

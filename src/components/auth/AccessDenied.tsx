@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ShieldAlert, ArrowLeft, LogOut, LayoutDashboard } from 'lucide-react';
-import { firebaseLogout } from '@/lib/firebase/authService';
+import { executeUniversalLogout } from '@/lib/auth/universalLogout';
 
 interface AccessDeniedProps {
   userEmail?: string;
@@ -11,13 +11,12 @@ interface AccessDeniedProps {
 }
 
 export function AccessDenied({
-  userEmail = 'member@marriagemediausa.com',
+  userEmail = 'member@muslimbibah.com',
   userRole = 'MEMBER',
   requiredRole = 'ADMIN',
 }: AccessDeniedProps) {
   const handleSignOut = async () => {
-    await firebaseLogout();
-    window.location.href = '/login?redirect=/admin';
+    await executeUniversalLogout('/login?logged_out=1');
   };
 
   return (

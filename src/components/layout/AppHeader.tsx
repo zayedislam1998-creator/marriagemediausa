@@ -24,7 +24,8 @@ import {
   LogOut,
 } from 'lucide-react';
 
-import { onFirebaseAuthState, firebaseLogout } from '@/lib/firebase/authService';
+import { onFirebaseAuthState } from '@/lib/firebase/authService';
+import { executeUniversalLogout } from '@/lib/auth/universalLogout';
 
 export function AppHeader() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -42,9 +43,38 @@ export function AppHeader() {
   } | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onFirebaseAuthState((user, loading) => {
+    let isCancelled = false;
+
+    // 1. Primary check: PostgreSQL HTTP-Only session
+    const checkServerSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.user && !isCancelled) {
+            setCurrentUser({
+              authenticated: true,
+              user: {
+                userId: data.user.userId,
+                email: data.user.email,
+                fullName: data.user.fullName || data.user.email,
+                role: data.user.role,
+                tier: data.user.tier,
+              },
+            });
+            return true;
+          }
+        }
+      } catch {}
+      return false;
+    };
+
+    checkServerSession();
+
+    // 2. Client SDK synchronization
+    const unsubscribe = onFirebaseAuthState(async (user, loading) => {
       if (loading) return;
-      if (user) {
+      if (user && !isCancelled) {
         setCurrentUser({
           authenticated: true,
           user: {
@@ -55,22 +85,22 @@ export function AppHeader() {
             tier: user.membershipTier,
           },
         });
-      } else {
-        setCurrentUser({ authenticated: false });
+      } else if (!user && !isCancelled) {
+        const hasServer = await checkServerSession();
+        if (!hasServer && !isCancelled) {
+          setCurrentUser({ authenticated: false });
+        }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isCancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   const handleLogout = async () => {
-    try {
-      await firebaseLogout();
-      setCurrentUser({ authenticated: false });
-      window.location.href = '/login';
-    } catch {
-      window.location.href = '/login';
-    }
+    await executeUniversalLogout();
   };
 
   useEffect(() => {

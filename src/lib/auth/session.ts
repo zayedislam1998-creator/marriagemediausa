@@ -17,7 +17,7 @@ export interface SessionPayload {
 }
 
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || 'marriagemediausa-2026-sacred-production-secret-key-halal'
+  process.env.AUTH_SECRET || 'muslimbibah-2026-sacred-production-secret-key-halal'
 );
 
 const COOKIE_NAME = 'mb_session';
@@ -85,5 +85,13 @@ export async function setSessionCookie(payload: SessionPayload): Promise<void> {
  */
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
+  cookieStore.set(COOKIE_NAME, '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/',
+    expires: new Date(0),
+  });
   cookieStore.delete(COOKIE_NAME);
 }

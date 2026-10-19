@@ -16,11 +16,13 @@ import {
   Lock,
   Eye,
   Key,
+  CreditCard,
 } from 'lucide-react';
 import { SeatMember, AuditLog } from '@/lib/admin/store';
 import { inviteSeatAction, toggleSeatStatusAction } from '@/lib/admin/actions';
 import { broadcastSyncEvent, useCrossTabSync } from '@/lib/sync/broadcastSync';
 import { seedFirestoreInitialData } from '@/lib/firebase/firestoreService';
+import { PaymentGatewaysTab } from './PaymentGatewaysTab';
 
 interface SettingsSecurityTabProps {
   initialSeats: SeatMember[];
@@ -34,14 +36,14 @@ export function SettingsSecurityTab({
   adminEmail,
 }: SettingsSecurityTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<
-    'platform' | 'halal' | 'seats' | 'audit' | 'cms' | 'telemetry'
+    'platform' | 'gateways' | 'halal' | 'seats' | 'audit' | 'cms' | 'telemetry'
   >('platform');
 
   const [statusMsg, setStatusMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
   // Settings State
   const [siteName, setSiteName] = useState('MarriageMediaUSA.com');
-  const [adminPasscode, setAdminPasscode] = useState('MB-ADMIN-2026');
+  const [adminPasscode, setAdminPasscode] = useState('MMU-ADMIN-2026');
   const [mandatoryWali, setMandatoryWali] = useState(true);
   const [purdahDefault, setPurdahDefault] = useState<'BLURRED' | 'PUBLIC'>('BLURRED');
   const [chatFilterActive, setChatFilterActive] = useState(true);
@@ -131,6 +133,7 @@ export function SettingsSecurityTab({
 
   const subTabs = [
     { id: 'platform' as const, label: 'Platform & Auth', icon: Settings },
+    { id: 'gateways' as const, label: 'Payment Gateways & Billing', icon: CreditCard },
     { id: 'halal' as const, label: 'Halal & Wali Rules', icon: Shield },
     { id: 'seats' as const, label: `Team Seats (${seats.length})`, icon: UserCheck },
     { id: 'audit' as const, label: `Audit Logs (${auditLogs.length})`, icon: ShieldCheck },
@@ -726,6 +729,9 @@ export function SettingsSecurityTab({
           </div>
         </div>
       )}
+
+      {/* SUB-TAB 1.5: Payment Gateways (Stripe & PayPal REST v2) */}
+      {activeSubTab === 'gateways' && <PaymentGatewaysTab />}
     </div>
   );
 }

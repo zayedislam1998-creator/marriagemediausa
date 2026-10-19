@@ -1,6 +1,4 @@
-'use client';
-
-import { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export type SyncEventType =
   | 'PROFILE_UPDATED'
@@ -19,7 +17,7 @@ export interface SyncMessage {
   sourceTabId: string;
 }
 
-const CHANNEL_NAME = 'marriagemediausa_cross_tab_sync';
+const CHANNEL_NAME = 'muslimbibah_cross_tab_sync';
 
 // Generate unique tab session ID
 const CURRENT_TAB_ID = typeof window !== 'undefined'
@@ -66,14 +64,21 @@ export function useCrossTabSync(
   onSync: (message: SyncMessage) => void,
   listenTypes?: SyncEventType[]
 ) {
+  const onSyncRef = useRef(onSync);
+  onSyncRef.current = onSync;
+
+  const listenTypesRef = useRef(listenTypes);
+  listenTypesRef.current = listenTypes;
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     let channel: BroadcastChannel | null = null;
 
     const handleMessage = (msg: SyncMessage) => {
-      if (!listenTypes || listenTypes.includes(msg.type)) {
-        onSync(msg);
+      const types = listenTypesRef.current;
+      if (!types || types.includes(msg.type)) {
+        onSyncRef.current(msg);
       }
     };
 
@@ -103,5 +108,5 @@ export function useCrossTabSync(
       }
       window.removeEventListener('mb_cross_tab_sync', handleLocalEvent);
     };
-  }, [onSync, listenTypes]);
+  }, []);
 }

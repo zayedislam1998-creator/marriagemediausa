@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sliders,
   CheckCircle,
@@ -20,8 +20,17 @@ import {
   Layout,
   Palette,
   Check,
-  Move,
+  CreditCard,
+  GripVertical,
+  HelpCircle,
+  ShieldCheck,
 } from 'lucide-react';
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from '@hello-pangea/dnd';
 import { FormBuilderConfigRecord, FormBuilderField } from '@/db/queries';
 import { saveFormBuilderConfigAction } from '@/lib/admin/formBuilderActions';
 import { broadcastSyncEvent, useCrossTabSync } from '@/lib/sync/broadcastSync';
@@ -30,31 +39,136 @@ interface FormStudioTabProps {
   initialConfigs: FormBuilderConfigRecord[];
 }
 
+const DEFAULT_TEMPLATES: Record<string, FormBuilderConfigRecord> = {
+  login: {
+    formId: 'login',
+    title: 'Member & Admin Login Portal',
+    theme: 'emerald',
+    borderRadius: '12px',
+    buttonText: 'Sign In to Account',
+    fieldsJson: [
+      { id: 'f_log_1', fieldKey: 'identifier', label: 'Email or Mobile Number', placeholder: 'Enter registered email or phone...', type: 'text', required: true, width: 'full', order: 1 },
+      { id: 'f_log_2', fieldKey: 'password', label: 'Password', placeholder: 'Enter your account password...', type: 'password', required: true, width: 'full', order: 2 },
+    ],
+    updatedAt: new Date(),
+  },
+  register: {
+    formId: 'register',
+    title: 'New Member Registration',
+    theme: 'emerald',
+    borderRadius: '12px',
+    buttonText: 'Create Verified Account',
+    fieldsJson: [
+      { id: 'f_reg_1', fieldKey: 'name', label: 'Candidate Full Name', placeholder: 'Official full name', type: 'text', required: true, width: 'half', order: 1 },
+      { id: 'f_reg_2', fieldKey: 'gender', label: 'Gender', placeholder: 'Select gender (Male / Female)', type: 'select', required: true, width: 'half', order: 2 },
+      { id: 'f_reg_3', fieldKey: 'email', label: 'Email Address', placeholder: 'name@example.com', type: 'email', required: true, width: 'full', order: 3 },
+      { id: 'f_reg_4', fieldKey: 'phone', label: 'WhatsApp / Mobile Number', placeholder: '+1 or +880...', type: 'tel', required: true, width: 'full', order: 4 },
+      { id: 'f_reg_5', fieldKey: 'password', label: 'Create Secure Password', placeholder: 'Minimum 8 characters...', type: 'password', required: true, width: 'full', order: 5 },
+    ],
+    updatedAt: new Date(),
+  },
+  profile: {
+    formId: 'profile',
+    title: 'Matrimonial Biodata Profile Form',
+    theme: 'emerald',
+    borderRadius: '12px',
+    buttonText: 'Save Biodata Profile',
+    fieldsJson: [
+      { id: 'f_prf_1', fieldKey: 'full_name', label: 'Full Legal Name', placeholder: 'Full Name', type: 'text', required: true, width: 'half', order: 1 },
+      { id: 'f_prf_2', fieldKey: 'gender', label: 'Gender', placeholder: 'Gender', type: 'select', required: true, width: 'half', order: 2 },
+      { id: 'f_prf_3', fieldKey: 'date_of_birth', label: 'Date of Birth', placeholder: 'YYYY-MM-DD', type: 'date', required: true, width: 'half', order: 3 },
+      { id: 'f_prf_4', fieldKey: 'marital_status', label: 'Marital Status', placeholder: 'Marital Status', type: 'select', required: true, width: 'half', order: 4 },
+      { id: 'f_prf_5', fieldKey: 'profession', label: 'Profession & Sector', placeholder: 'Profession', type: 'text', required: true, width: 'half', order: 5 },
+      { id: 'f_prf_6', fieldKey: 'guardian_phone', label: 'Guardian / Wali Contact', placeholder: '+1 or +880...', type: 'tel', required: true, width: 'half', order: 6 },
+    ],
+    updatedAt: new Date(),
+  },
+  cv: {
+    formId: 'cv',
+    title: 'Sunnah Matrimonial CV Resume',
+    theme: 'emerald',
+    borderRadius: '12px',
+    buttonText: 'Generate Matrimonial CV',
+    fieldsJson: [
+      { id: 'f_cv_1', fieldKey: 'cv_header', label: 'Bismillah & Basmala', placeholder: 'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ', type: 'static_header', required: false, width: 'full', order: 1 },
+      { id: 'f_cv_2', fieldKey: 'cv_summary', label: 'Islamic Executive Summary', placeholder: 'Overview of Islamic values, life goals...', type: 'textarea', required: true, width: 'full', order: 2 },
+      { id: 'f_cv_3', fieldKey: 'cv_education', label: 'Academic & Religious Qualifications', placeholder: 'Degrees, Quranic studies...', type: 'textarea', required: true, width: 'full', order: 3 },
+    ],
+    updatedAt: new Date(),
+  },
+  payment: {
+    formId: 'payment',
+    title: 'Payment Gateway Fields & Checkout',
+    theme: 'emerald',
+    borderRadius: '12px',
+    buttonText: 'Proceed to Secure Payment',
+    fieldsJson: [
+      { id: 'f_pay_1', fieldKey: 'profile_token', label: 'Member Biodata Profile Token', placeholder: 'Auto-populated (e.g. #2026044925)', type: 'text', required: true, width: 'half', order: 1 },
+      { id: 'f_pay_2', fieldKey: 'payer_name', label: 'Cardholder / Payer Full Name', placeholder: 'Name on card or account', type: 'text', required: true, width: 'half', order: 2 },
+      { id: 'f_pay_3', fieldKey: 'payer_email', label: 'Billing Confirmation Email', placeholder: 'receipts@example.com', type: 'email', required: true, width: 'half', order: 3 },
+      { id: 'f_pay_4', fieldKey: 'payer_phone', label: 'WhatsApp / Phone Number', placeholder: '+1 (555) 000-0000', type: 'tel', required: true, width: 'half', order: 4 },
+      { id: 'f_pay_5', fieldKey: 'billing_address', label: 'Street Address', placeholder: '123 Muslim Way, Suite 4B', type: 'text', required: false, width: 'full', order: 5 },
+      { id: 'f_pay_6', fieldKey: 'city', label: 'City', placeholder: 'City', type: 'text', required: true, width: 'half', order: 6 },
+      { id: 'f_pay_7', fieldKey: 'state_province', label: 'State / Province / Division', placeholder: 'State or Division', type: 'text', required: true, width: 'half', order: 7 },
+      { id: 'f_pay_8', fieldKey: 'postal_code', label: 'Postal Code / ZIP', placeholder: 'Zip code', type: 'text', required: true, width: 'half', order: 8 },
+      { id: 'f_pay_9', fieldKey: 'country', label: 'Country', placeholder: 'Country of residence', type: 'text', required: true, width: 'half', order: 9 },
+      { id: 'f_pay_10', fieldKey: 'wali_consent', label: 'Wali / Guardian Acknowledgment', placeholder: 'Wali confirmed package upgrade', type: 'checkbox', required: false, width: 'full', order: 10 },
+    ],
+    updatedAt: new Date(),
+  },
+};
+
 export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
-  const [configs, setConfigs] = useState<FormBuilderConfigRecord[]>(initialConfigs);
+  // Merge initialConfigs with DEFAULT_TEMPLATES to ensure all 5 forms always exist
+  const [configs, setConfigs] = useState<FormBuilderConfigRecord[]>(() => {
+    const map = new Map<string, FormBuilderConfigRecord>();
+    Object.keys(DEFAULT_TEMPLATES).forEach((k) => map.set(k, DEFAULT_TEMPLATES[k]));
+    (initialConfigs || []).forEach((c) => {
+      if (c && c.formId) map.set(c.formId, c);
+    });
+    return Array.from(map.values());
+  });
+
   const [selectedFormId, setSelectedFormId] = useState<string>('login');
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const [isClientMounted, setIsClientMounted] = useState(false);
 
-  // Cross-tab sync
+  useEffect(() => {
+    setIsClientMounted(true);
+  }, []);
+
+  // Cross-tab sync listener
   useCrossTabSync((msg) => {
     if (msg.type === 'FORM_LAYOUT_UPDATED') {
-      setStatusMsg({ text: '✓ Form studio synchronized across active tabs', isError: false });
+      setStatusMsg({ text: '✓ Form Studio synchronized across active browser windows', isError: false });
       setTimeout(() => setStatusMsg(null), 3500);
     }
   }, ['FORM_LAYOUT_UPDATED']);
 
-  const activeConfig = configs.find((c) => c.formId === selectedFormId) || configs[0] || {
-    formId: 'login',
-    title: 'Login Form',
-    theme: 'emerald',
-    borderRadius: '12px',
-    buttonText: 'Sign In',
-    fieldsJson: [],
-    updatedAt: new Date(),
-  };
+  const activeConfig =
+    configs.find((c) => c.formId === selectedFormId) ||
+    DEFAULT_TEMPLATES[selectedFormId] ||
+    DEFAULT_TEMPLATES.login;
 
   const fields = activeConfig.fieldsJson || [];
+
+  // Drag and Drop End handler using official @hello-pangea/dnd
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const sourceIndex = result.source.index;
+    const destIndex = result.destination.index;
+    if (sourceIndex === destIndex) return;
+
+    const reordered = Array.from(fields);
+    const [removed] = reordered.splice(sourceIndex, 1);
+    reordered.splice(destIndex, 0, removed);
+    reordered.forEach((f, i) => (f.order = i + 1));
+
+    setConfigs((prev) =>
+      prev.map((c) => (c.formId === selectedFormId ? { ...c, fieldsJson: reordered } : c))
+    );
+  };
 
   // Update active form field property
   const handleUpdateField = (fieldId: string, updates: Partial<FormBuilderField>) => {
@@ -69,7 +183,7 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
     );
   };
 
-  // Reorder fields (Move Up)
+  // Accessible Reorder buttons (Move Up / Down)
   const handleMoveUp = (index: number) => {
     if (index === 0) return;
     const newFields = [...fields];
@@ -83,7 +197,6 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
     );
   };
 
-  // Reorder fields (Move Down)
   const handleMoveDown = (index: number) => {
     if (index === fields.length - 1) return;
     const newFields = [...fields];
@@ -107,7 +220,7 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
   };
 
   // Add field to form
-  const handleAddField = (fieldKey: string, label: string, type: any = 'text') => {
+  const handleAddField = (fieldKey: string, label: string, type: any = 'text', width: 'half' | 'full' = 'full') => {
     const newField: FormBuilderField = {
       id: `f_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       fieldKey,
@@ -115,7 +228,7 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
       placeholder: `Enter ${label.toLowerCase()}...`,
       type,
       required: true,
-      width: 'full',
+      width,
       order: fields.length + 1,
     };
 
@@ -131,7 +244,7 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
     );
   };
 
-  // Save form layout
+  // Save form layout to PostgreSQL
   const handleSaveForm = async () => {
     setSaving(true);
     setStatusMsg(null);
@@ -155,13 +268,20 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
     }
   };
 
-  // Theme styling helpers
   const themeAccentColor = {
     emerald: 'var(--emerald-600, #059669)',
     gold: 'var(--gold-600, #D97706)',
     minimal: '#334155',
     dark: '#0F172A',
   }[activeConfig.theme] || '#059669';
+
+  const formTabs = [
+    { id: 'login', title: 'Login Form', icon: KeyRound, desc: 'Member & Admin sign-in portal' },
+    { id: 'register', title: 'Registration Form', icon: User, desc: 'Public sign-up & credentials' },
+    { id: 'profile', title: 'Profile Biodata Form', icon: Layout, desc: '85+ field matrimonial biodata' },
+    { id: 'cv', title: 'Matrimonial CV Form', icon: FileText, desc: 'Sunnah matrimonial resume document' },
+    { id: 'payment', title: 'Payment Gateway Fields', icon: CreditCard, desc: 'Billing details, payer info & custom checkout fields' },
+  ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
@@ -186,7 +306,7 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
             </h2>
           </div>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.825rem', color: 'var(--text-muted)' }}>
-            Configure fields, drag & drop order, customize themes, and preview forms for Login, Registration, Profile, and CV.
+            Mouse-driven Drag & Drop reordering powered by <code style={{ color: '#059669' }}>@hello-pangea/dnd</code>. Customize fields, themes, and layouts for Login, Registration, Biodata, CV, and Payment Gateway Checkout.
           </p>
         </div>
 
@@ -221,14 +341,9 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
         </div>
       )}
 
-      {/* 2. Compact 4 Form Switcher Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-        {[
-          { id: 'login', title: 'Login Form', icon: KeyRound, desc: 'Member & Admin sign-in portal' },
-          { id: 'register', title: 'Registration Form', icon: User, desc: 'Public sign-up & credentials' },
-          { id: 'profile', title: 'Profile Biodata Form', icon: Layout, desc: '85+ field matrimonial biodata' },
-          { id: 'cv', title: 'Matrimonial CV Form', icon: FileText, desc: 'Sunnah matrimonial resume document' },
-        ].map((item) => {
+      {/* 2. Compact 5 Form Switcher Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+        {formTabs.map((item) => {
           const Icon = item.icon;
           const isSelected = selectedFormId === item.id;
           return (
@@ -248,8 +363,8 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                 <div
                   style={{
-                    width: 32,
-                    height: 32,
+                    width: 34,
+                    height: 34,
                     borderRadius: 8,
                     backgroundColor: isSelected ? 'rgba(5, 150, 105, 0.15)' : '#F1F5F9',
                     display: 'flex',
@@ -258,13 +373,22 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
                     color: isSelected ? 'var(--emerald-600)' : '#64748B',
                   }}
                 >
-                  <Icon size={16} />
+                  <Icon size={17} />
                 </div>
-                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                  {item.title}
-                </h4>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                    {item.title}
+                  </h4>
+                  {item.id === 'payment' && (
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#059669', background: '#ECFDF5', padding: '1px 6px', borderRadius: 4 }}>
+                      Gateway Desk
+                    </span>
+                  )}
+                </div>
               </div>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.desc}</p>
+              <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                {item.desc}
+              </p>
             </div>
           );
         })}
@@ -293,7 +417,7 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
               value={activeConfig.title}
               onChange={(e) => handleUpdateConfigMeta({ title: e.target.value })}
               className="input-field"
-              style={{ padding: '6px 12px', fontSize: '0.85rem', width: '220px' }}
+              style={{ padding: '6px 12px', fontSize: '0.85rem', width: '240px' }}
             />
           </div>
 
@@ -306,7 +430,7 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
               value={activeConfig.buttonText}
               onChange={(e) => handleUpdateConfigMeta({ buttonText: e.target.value })}
               className="input-field"
-              style={{ padding: '6px 12px', fontSize: '0.85rem', width: '220px' }}
+              style={{ padding: '6px 12px', fontSize: '0.85rem', width: '240px' }}
             />
           </div>
         </div>
@@ -344,214 +468,364 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
         </div>
       </div>
 
-      {/* 4. Main Two-Column Studio Workspace: Left Editor vs Right Live Preview */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '22px' }}>
-        {/* Left Column: Draggable Fields Canvas */}
+      {/* 4. Main Two-Column Studio Workspace: Left Draggable Editor vs Right Live Preview */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))', gap: '22px' }}>
+        {/* Left Column: Drag & Drop Reorderable Fields Canvas */}
         <div className="card-3d" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>
-              Form Structure ({fields.length} Fields)
-            </h3>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Reorder or add fields to customize form
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>
+                Form Structure ({fields.length} Fields)
+              </h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Drag grip handle <GripVertical size={13} style={{ display: 'inline', verticalAlign: 'middle' }} /> to reorder fields via mouse
+              </p>
+            </div>
+            <span className="badge-3d" style={{ fontSize: '0.7rem', background: '#ECFDF5', color: '#059669' }}>
+              dnd-enabled
             </span>
           </div>
 
-          {/* Fields Reorder List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '600px', overflowY: 'auto' }}>
-            {fields.map((field, idx) => (
-              <div
-                key={field.id}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 10,
-                  backgroundColor: 'var(--bg-app)',
-                  border: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                }}
-              >
-                {/* Reorder Buttons */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <button
-                    type="button"
-                    onClick={() => handleMoveUp(idx)}
-                    disabled={idx === 0}
+          {/* DND DragDropContext & Droppable Container */}
+          {isClientMounted ? (
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="form-fields-droppable">
+                {(droppableProvided, droppableSnapshot) => (
+                  <div
+                    ref={droppableProvided.innerRef}
+                    {...droppableProvided.droppableProps}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 2,
-                      cursor: idx === 0 ? 'default' : 'pointer',
-                      opacity: idx === 0 ? 0.3 : 1,
-                      color: 'var(--text-muted)',
-                    }}
-                    title="Move Up"
-                  >
-                    <ArrowUp size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMoveDown(idx)}
-                    disabled={idx === fields.length - 1}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 2,
-                      cursor: idx === fields.length - 1 ? 'default' : 'pointer',
-                      opacity: idx === fields.length - 1 ? 0.3 : 1,
-                      color: 'var(--text-muted)',
-                    }}
-                    title="Move Down"
-                  >
-                    <ArrowDown size={14} />
-                  </button>
-                </div>
-
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input
-                      type="text"
-                      value={field.label}
-                      onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
-                      style={{
-                        fontWeight: 800,
-                        fontSize: '0.85rem',
-                        border: 'none',
-                        background: 'transparent',
-                        color: 'var(--text-main)',
-                        padding: 0,
-                        outline: 'none',
-                        width: '100%',
-                      }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input
-                      type="text"
-                      value={field.placeholder || ''}
-                      onChange={(e) => handleUpdateField(field.id, { placeholder: e.target.value })}
-                      placeholder="Placeholder text"
-                      style={{
-                        fontSize: '0.75rem',
-                        border: 'none',
-                        background: 'transparent',
-                        color: 'var(--text-muted)',
-                        padding: 0,
-                        outline: 'none',
-                        width: '100%',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Width & Required Toggles */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateField(field.id, { width: field.width === 'half' ? 'full' : 'half' })}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: 6,
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      background: field.width === 'half' ? '#FEF3C7' : '#F1F5F9',
-                      color: field.width === 'half' ? '#B45309' : '#475569',
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
-                    title="Toggle 1-Column vs 2-Column Width"
-                  >
-                    {field.width === 'half' ? '50% Width' : 'Full Width'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateField(field.id, { required: !field.required })}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: 6,
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      background: field.required ? '#ECFDF5' : '#F1F5F9',
-                      color: field.required ? '#047857' : '#64748B',
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {field.required ? 'Mandatory' : 'Optional'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteField(field.id)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#EF4444',
-                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                      maxHeight: '620px',
+                      overflowY: 'auto',
                       padding: 4,
+                      borderRadius: 10,
+                      backgroundColor: droppableSnapshot.isDraggingOver ? 'rgba(5, 150, 105, 0.05)' : 'transparent',
+                      transition: 'background-color 0.2s ease',
                     }}
-                    title="Remove Field"
                   >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+                    {fields.map((field, idx) => (
+                      <Draggable key={field.id} draggableId={field.id} index={idx}>
+                        {(dragProvided, dragSnapshot) => (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            style={{
+                              ...dragProvided.draggableProps.style,
+                              padding: '12px 14px',
+                              borderRadius: 10,
+                              backgroundColor: dragSnapshot.isDragging ? '#FFFFFF' : 'var(--bg-app)',
+                              border: dragSnapshot.isDragging
+                                ? '2px solid var(--emerald-600)'
+                                : '1px solid var(--border-subtle)',
+                              boxShadow: dragSnapshot.isDragging
+                                ? '0 12px 24px -4px rgba(5, 150, 105, 0.25)'
+                                : 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              transition: 'box-shadow 0.15s ease',
+                            }}
+                          >
+                            {/* Grip Handle for Mouse Dragging */}
+                            <div
+                              {...dragProvided.dragHandleProps}
+                              style={{
+                                cursor: 'grab',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: dragSnapshot.isDragging ? 'var(--emerald-600)' : '#94A3B8',
+                                padding: '4px 2px',
+                                borderRadius: 4,
+                              }}
+                              title="Click and drag to reorder"
+                            >
+                              <GripVertical size={18} />
+                            </div>
 
-          {/* Add Field Palette */}
+                            {/* Fallback Accessible Move Buttons */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveUp(idx)}
+                                disabled={idx === 0}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  padding: 1,
+                                  cursor: idx === 0 ? 'default' : 'pointer',
+                                  opacity: idx === 0 ? 0.3 : 1,
+                                  color: 'var(--text-muted)',
+                                }}
+                                title="Move Up"
+                              >
+                                <ArrowUp size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveDown(idx)}
+                                disabled={idx === fields.length - 1}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  padding: 1,
+                                  cursor: idx === fields.length - 1 ? 'default' : 'pointer',
+                                  opacity: idx === fields.length - 1 ? 0.3 : 1,
+                                  color: 'var(--text-muted)',
+                                }}
+                                title="Move Down"
+                              >
+                                <ArrowDown size={13} />
+                              </button>
+                            </div>
+
+                            {/* Field Details */}
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <input
+                                  type="text"
+                                  value={field.label}
+                                  onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
+                                  style={{
+                                    fontWeight: 800,
+                                    fontSize: '0.85rem',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: 'var(--text-main)',
+                                    padding: 0,
+                                    outline: 'none',
+                                    width: '100%',
+                                  }}
+                                />
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <input
+                                  type="text"
+                                  value={field.placeholder || ''}
+                                  onChange={(e) => handleUpdateField(field.id, { placeholder: e.target.value })}
+                                  placeholder="Placeholder text"
+                                  style={{
+                                    fontSize: '0.75rem',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: 'var(--text-muted)',
+                                    padding: 0,
+                                    outline: 'none',
+                                    width: '100%',
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Width & Required Toggles */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateField(field.id, { width: field.width === 'half' ? 'full' : 'half' })}
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: 6,
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  background: field.width === 'half' ? '#FEF3C7' : '#F1F5F9',
+                                  color: field.width === 'half' ? '#B45309' : '#475569',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                }}
+                                title="Toggle 1-Column vs 2-Column Width"
+                              >
+                                {field.width === 'half' ? '50%' : '100%'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateField(field.id, { required: !field.required })}
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: 6,
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  background: field.required ? '#ECFDF5' : '#F1F5F9',
+                                  color: field.required ? '#047857' : '#64748B',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {field.required ? 'Req' : 'Opt'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteField(field.id)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#EF4444',
+                                  cursor: 'pointer',
+                                  padding: 4,
+                                }}
+                                title="Remove Field"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {droppableProvided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+          ) : (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+              Loading form canvas...
+            </div>
+          )}
+
+          {/* Add Field Palette Contextual to Selected Form */}
           <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
-              QUICK-ADD FIELDS FROM PALETTE:
+              {selectedFormId === 'payment'
+                ? 'QUICK-ADD PAYMENT & BILLING FIELDS:'
+                : 'QUICK-ADD FIELDS FROM PALETTE:'}
             </span>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => handleAddField('phone_number', 'Phone Number', 'tel')}
-                className="btn-3d-secondary"
-                style={{ fontSize: '0.72rem', padding: '5px 10px' }}
-              >
-                + Phone
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddField('date_of_birth', 'Date of Birth', 'date')}
-                className="btn-3d-secondary"
-                style={{ fontSize: '0.72rem', padding: '5px 10px' }}
-              >
-                + DOB
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddField('guardian_wali', 'Wali / Guardian Name', 'text')}
-                className="btn-3d-secondary"
-                style={{ fontSize: '0.72rem', padding: '5px 10px' }}
-              >
-                + Wali Guardian
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddField('profession', 'Profession & Career', 'text')}
-                className="btn-3d-secondary"
-                style={{ fontSize: '0.72rem', padding: '5px 10px' }}
-              >
-                + Profession
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddField('custom_note', 'Matrimonial Notes', 'textarea')}
-                className="btn-3d-secondary"
-                style={{ fontSize: '0.72rem', padding: '5px 10px' }}
-              >
-                + Custom Textarea
-              </button>
-            </div>
+
+            {selectedFormId === 'payment' ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('profile_token', 'Profile Token ID', 'text', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px', color: '#059669', borderColor: '#A7F3D0' }}
+                >
+                  + Profile Token (Auto)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('payer_name', 'Payer Full Name', 'text', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Payer Name
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('payer_phone', 'WhatsApp / Phone', 'tel', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + WhatsApp / Phone
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('billing_address', 'Street Address', 'text', 'full')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Street Address
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('city', 'City', 'text', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + City
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('state_province', 'State / Province', 'text', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + State / Province
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('postal_code', 'Postal Code / ZIP', 'text', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Postal Code / ZIP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('country', 'Country', 'text', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Country
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('wali_consent', 'Wali / Guardian Consent', 'checkbox', 'full')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Wali Consent
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('order_notes', 'Special Order Instructions', 'textarea', 'full')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Order Notes
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('phone_number', 'Phone Number', 'tel', 'full')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Phone
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('date_of_birth', 'Date of Birth', 'date', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + DOB
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('guardian_wali', 'Wali / Guardian Name', 'text', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Wali Guardian
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('profession', 'Profession & Career', 'text', 'half')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Profession
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddField('custom_note', 'Matrimonial Notes', 'textarea', 'full')}
+                  className="btn-3d-secondary"
+                  style={{ fontSize: '0.72rem', padding: '5px 10px' }}
+                >
+                  + Custom Textarea
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right Column: Live Interactive Form Preview */}
+        {/* Right Column: Live Interactive WYSIWYG Form Preview */}
         <div className="card-3d" style={{ padding: '24px', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -578,6 +852,28 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
             <h4 style={{ margin: '0 0 16px 0', fontSize: '1.2rem', fontWeight: 800, textAlign: 'center', color: themeAccentColor }}>
               {activeConfig.title}
             </h4>
+
+            {selectedFormId === 'payment' && (
+              <div
+                style={{
+                  marginBottom: 16,
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  backgroundColor: 'rgba(5, 150, 105, 0.08)',
+                  border: '1px dashed #059669',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: '0.8rem',
+                  color: '#065F46',
+                }}
+              >
+                <ShieldCheck size={18} />
+                <span>
+                  <strong>Halal Guaranteed Checkout:</strong> Authenticated candidate biodata & Profile Token are auto-populated into this payment payload.
+                </span>
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
               {fields.map((f) => {
@@ -614,19 +910,11 @@ export function FormStudioTab({ initialConfigs }: FormStudioTabProps) {
                       <div style={{ textAlign: 'center', padding: '8px', color: themeAccentColor, fontFamily: "'Amiri', serif", fontSize: '1.15rem' }}>
                         {f.placeholder || f.label}
                       </div>
-                    ) : f.type === 'rich_block' ? (
-                      <div
-                        style={{
-                          padding: '10px 14px',
-                          borderRadius: 8,
-                          backgroundColor: activeConfig.theme === 'dark' ? '#1E293B' : '#F1F5F9',
-                          border: '1px dashed #CBD5E1',
-                          fontSize: '0.8rem',
-                          color: 'var(--text-muted)',
-                        }}
-                      >
-                        📄 {f.label} Content Block
-                      </div>
+                    ) : f.type === 'checkbox' ? (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', cursor: 'pointer', marginTop: 4 }}>
+                        <input type="checkbox" defaultChecked />
+                        <span>{f.placeholder || f.label}</span>
+                      </label>
                     ) : (
                       <input
                         type={f.type || 'text'}

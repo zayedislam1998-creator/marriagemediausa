@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Check, Crown, ShieldCheck, Sparkles, Gift, ArrowRight } from 'lucide-react';
 import { Package } from '@/db/repository';
 import { getFirestorePackages } from '@/lib/firebase/firestoreService';
+import { useCrossTabSync } from '@/lib/sync/broadcastSync';
 
 interface PricingSectionProps {
   packages: Package[];
@@ -36,37 +37,58 @@ export function PricingSection({ packages }: PricingSectionProps) {
   const [displayPackages, setDisplayPackages] = useState<any[]>(packages);
   const [showAllFreeFeatures, setShowAllFreeFeatures] = useState(false);
 
-  useEffect(() => {
-    getFirestorePackages()
-      .then((fbPkgs) => {
-        if (fbPkgs && fbPkgs.length > 0) {
-          const activePkgs = fbPkgs.filter((p) => p.isActive);
-          if (activePkgs.length > 0) {
-            const mapped = activePkgs.map((p, idx) => ({
-              id: p.id.startsWith('pkg_') ? p.id.replace('pkg_', '') : idx + 1,
-              name: p.name,
-              duration_months: p.durationMonths,
-              durationMonths: p.durationMonths,
-              price_usd: p.priceUsd,
-              priceUsd: p.priceUsd,
-              contact_credits: p.contactCredits,
-              contactCredits: p.contactCredits,
-              daily_profile_view_limit: p.dailyProfileViewLimit,
-              dailyProfileViewLimit: p.dailyProfileViewLimit,
-              features: p.features,
-              featuresJson: p.features,
-              badge_title: p.badgeTitle,
-              badgeTitle: p.badgeTitle,
-              is_active: p.isActive,
-            }));
-            setDisplayPackages(mapped);
-          }
+  const fetchLivePackages = async () => {
+    // 1. Primary Source of Truth: PostgreSQL database via /api/packages
+    try {
+      const res = await fetch('/api/packages');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.packages) && data.packages.length > 0) {
+          setDisplayPackages(data.packages);
+          return;
         }
-      })
-      .catch(() => {
-        // Keep initial packages
-      });
+      }
+    } catch {}
+
+    // 2. Fallback to Cloud Firestore
+    try {
+      const fbPkgs = await getFirestorePackages();
+      if (fbPkgs && fbPkgs.length > 0) {
+        const activePkgs = fbPkgs.filter((p) => p.isActive);
+        if (activePkgs.length > 0) {
+          const mapped = activePkgs.map((p, idx) => ({
+            id: p.id.startsWith('pkg_') ? p.id.replace('pkg_', '') : idx + 1,
+            name: p.name,
+            duration_months: p.durationMonths,
+            durationMonths: p.durationMonths,
+            price_usd: p.priceUsd,
+            priceUsd: p.priceUsd,
+            contact_credits: p.contactCredits,
+            contactCredits: p.contactCredits,
+            daily_profile_view_limit: p.dailyProfileViewLimit,
+            dailyProfileViewLimit: p.dailyProfileViewLimit,
+            features: p.features,
+            featuresJson: p.features,
+            badge_title: p.badgeTitle,
+            badgeTitle: p.badgeTitle,
+            is_active: p.isActive,
+          }));
+          setDisplayPackages(mapped);
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchLivePackages();
   }, []);
+
+  // Real-time synchronization when admin adds or modifies packages
+  useCrossTabSync((msg) => {
+    if (msg.type === 'PACKAGE_UPDATED') {
+      fetchLivePackages();
+    }
+  }, ['PACKAGE_UPDATED']);
 
   return (
     <section
