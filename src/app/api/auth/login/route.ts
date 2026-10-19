@@ -4,9 +4,11 @@ import { eq, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, profiles, userSubscriptions, packages } from '@/db/schema';
 import { setSessionCookie, UserRole, MembershipTier } from '@/lib/auth/session';
+import { ensureDatabaseReady } from '@/db/auto-migrate';
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureDatabaseReady();
     const body = await req.json();
     const identifier = (body.identifier || '').toString().trim().toLowerCase();
     const password = (body.password || '').toString();

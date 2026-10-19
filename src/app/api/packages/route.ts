@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getAllPackagesFromDb } from '@/db/queries';
 import { DomainRepository } from '@/db/repository';
+import { ensureDatabaseReady } from '@/db/auto-migrate';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    await ensureDatabaseReady();
     const dbPackages = await getAllPackagesFromDb();
 
     // If database has packages, filter active packages

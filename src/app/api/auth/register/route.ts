@@ -4,9 +4,13 @@ import { eq, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, profiles, userSubscriptions, packages } from '@/db/schema';
 import { setSessionCookie, UserRole } from '@/lib/auth/session';
+import { ensureDatabaseReady } from '@/db/auto-migrate';
 
 export async function POST(req: NextRequest) {
   try {
+    // Ensure all tables and seed exist
+    await ensureDatabaseReady();
+
     const body = await req.json();
 
     const fullName = (body.fullName || '').toString().trim();
