@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Search,
   User,
@@ -22,6 +22,7 @@ import {
   X,
   FileText,
   UserCheck,
+  UserPlus,
 } from 'lucide-react';
 import { AdminMemberRecord } from '@/db/queries';
 import {
@@ -31,6 +32,7 @@ import {
 } from '@/lib/auth/actions';
 import { adminAssignMemberTierAction } from '@/lib/admin/packageActions';
 import { adminSetMemberAccess } from '@/lib/firebase/authService';
+import { createAdminAccountAction, getAdminMembersAction } from '@/lib/admin/actions';
 
 interface MembersDirectoryTabProps {
   initialMembers: AdminMemberRecord[];
@@ -46,7 +48,36 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [adminDialogOpen, setAdminDialogOpen] = useState(false);
+  const [adminSubmitting, setAdminSubmitting] = useState(false);
+  const [adminFormError, setAdminFormError] = useState<string | null>(null);
+  const [directoryLoading, setDirectoryLoading] = useState(true);
   const PAGE_SIZE = 6;
+  const adminLabelStyle = { display: 'grid', gap: 6, color: '#334155', fontSize: '.82rem', fontWeight: 700 } as const;
+  const adminInputStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #CBD5E1', borderRadius: 9, background: '#fff', color: '#0F172A', font: 'inherit' } as const;
+
+  useEffect(() => {
+    let isMounted = true;
+    getAdminMembersAction()
+      .then((result) => {
+        if (!isMounted) return;
+        if (result.success) {
+          setMembers(result.members);
+        } else {
+          setNotification({ type: 'error', message: result.error || 'Could not load accounts.' });
+        }
+        setDirectoryLoading(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setDirectoryLoading(false);
+        setNotification({ type: 'error', message: 'Could not load accounts from the database.' });
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Filter members
   const filteredMembers = members.filter((m) => {
@@ -181,8 +212,105 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
     }
   };
 
+  const handleCreateAdminAccount = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    setAdminSubmitting(true);
+    setAdminFormError(null);
+
+    const result = await createAdminAccountAction(new FormData(form));
+    if (!result.success) {
+      setAdminSubmitting(false);
+      setAdminFormError(result.error || 'Could not create the administrator account.');
+      return;
+    }
+
+    const refreshed = await getAdminMembersAction();
+    if (refreshed.success) setMembers(refreshed.members);
+    form.reset();
+    setAdminDialogOpen(false);
+    setAdminSubmitting(false);
+    setNotification({ type: 'success', message: `Administrator account created for ${result.user.email}.` });
+    setTimeout(() => setNotification(null), 5000);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {adminDialogOpen && (
+        <div
+          role="presentation"
+          onClick={() => !adminSubmitting && setAdminDialogOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+            background: 'rgba(15, 23, 42, 0.62)',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <form
+            onSubmit={handleCreateAdminAccount}
+            onClick={(event) => event.stopPropagation()}
+            style={{ width: '100%', maxWidth: 520, padding: 24, borderRadius: 16, background: '#fff', boxShadow: '0 24px 70px rgba(15,23,42,.3)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 18 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0F172A' }}>Create administrator account</h3>
+                <p style={{ margin: '6px 0 0', color: '#64748B', fontSize: '.85rem' }}>The account will be saved in PostgreSQL and can sign in immediately.</p>
+              </div>
+              <button type="button" aria-label="Close" disabled={adminSubmitting} onClick={() => setAdminDialogOpen(false)} style={{ border: 0, background: 'transparent', color: '#64748B', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {adminFormError && (
+              <div role="alert" style={{ marginBottom: 14, padding: 11, borderRadius: 8, background: '#FFF1F2', color: '#9F1239', fontSize: '.85rem', fontWeight: 700 }}>
+                {adminFormError}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gap: 13 }}>
+              <label style={adminLabelStyle}>
+                Email address
+                <input name="email" type="email" required autoComplete="email" style={adminInputStyle} placeholder="admin@example.com" />
+              </label>
+              <label style={adminLabelStyle}>
+                Phone number with country code
+                <input name="phoneNumber" type="tel" required autoComplete="tel" style={adminInputStyle} placeholder="+1 202 555 0100" />
+              </label>
+              <label style={adminLabelStyle}>
+                Administrator access
+                <select name="role" defaultValue="SUPER_ADMIN" style={adminInputStyle}>
+                  <option value="SUPER_ADMIN">Super Admin — full access</option>
+                  <option value="EDITOR">Editor — content and CMS</option>
+                  <option value="MODERATOR">Moderator — KYC and moderation</option>
+                </select>
+              </label>
+              <label style={adminLabelStyle}>
+                Initial password
+                <input name="password" type="password" required minLength={12} autoComplete="new-password" style={adminInputStyle} />
+                <span style={{ fontSize: '.75rem', color: '#64748B', fontWeight: 500 }}>Use at least 12 characters. The password is saved as a hash.</span>
+              </label>
+              <label style={adminLabelStyle}>
+                Confirm password
+                <input name="confirmPassword" type="password" required minLength={12} autoComplete="new-password" style={adminInputStyle} />
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
+              <button type="button" disabled={adminSubmitting} onClick={() => setAdminDialogOpen(false)} className="btn-3d-secondary" style={{ padding: '10px 14px', borderRadius: 9 }}>Cancel</button>
+              <button type="submit" disabled={adminSubmitting} className="btn-3d-emerald" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', border: 0, borderRadius: 9, cursor: adminSubmitting ? 'wait' : 'pointer' }}>
+                <UserPlus size={16} /> {adminSubmitting ? 'Creating…' : 'Create account'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Toast Notification */}
       {notification && (
         <div
@@ -233,6 +361,14 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => { setAdminFormError(null); setAdminDialogOpen(true); }}
+              className="btn-3d-emerald"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 12px', border: 0, borderRadius: 9, fontSize: '.8rem', fontWeight: 800, cursor: 'pointer' }}
+            >
+              <UserPlus size={15} /> Add Administrator
+            </button>
             <span className="badge-3d" style={{ background: '#F8FAFC', color: 'var(--text-main)' }}>
               Total: {members.length}
             </span>
@@ -309,7 +445,7 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {/* Role Filter Pills */}
             <div style={{ display: 'flex', background: '#F1F5F9', padding: 3, borderRadius: 10 }}>
-              {(['ALL', 'SUPER_ADMIN', 'MEMBER'] as const).map((r) => (
+              {(['ALL', 'SUPER_ADMIN', 'EDITOR', 'MODERATOR', 'MEMBER'] as const).map((r) => (
                 <button
                   key={r}
                   type="button"
@@ -330,7 +466,7 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  {r === 'ALL' ? 'All Roles' : r === 'SUPER_ADMIN' ? '👑 Admins' : '👤 Members'}
+                  {r === 'ALL' ? 'All Roles' : r === 'SUPER_ADMIN' ? '👑 Super Admins' : r === 'EDITOR' ? '✍️ Editors' : r === 'MODERATOR' ? '🛡️ Moderators' : '👤 Members'}
                 </button>
               ))}
             </div>
@@ -408,7 +544,7 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
               {filteredMembers.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    No members match the current filter criteria.
+                    {directoryLoading ? 'Loading accounts from PostgreSQL…' : 'No accounts match the current filter criteria.'}
                   </td>
                 </tr>
               ) : (
@@ -446,7 +582,7 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
                           </div>
                           <div>
                             <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>
-                              {prof?.fullName || 'Registered Member'}
+                              {prof?.fullName || (member.role === 'MEMBER' ? 'Registered Member' : 'Administrator Account')}
                             </div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span>ID: {prof?.profileId || 'N/A'}</span>
