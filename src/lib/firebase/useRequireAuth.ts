@@ -16,30 +16,29 @@ export function useRequireAuth(options?: UseRequireAuthOptions) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUnauthorizedRole, setIsUnauthorizedRole] = useState<boolean>(false);
   const hasRedirectedRef = useRef<boolean>(false);
+  const authResolvedRef = useRef<boolean>(false);
 
   useEffect(() => {
     let isCancelled = false;
+    authResolvedRef.current = false;
 
-    // Safety fallback timeout: under NO circumstances will loading spinner stay stuck > 3.5s
+    // Stop showing the spinner if the API is slow, but do not treat a timeout as
+    // proof that the session is invalid. The API response remains authoritative.
     const safetyTimer = setTimeout(() => {
-      if (!isCancelled && isLoading) {
+      if (!isCancelled && !authResolvedRef.current) {
         setIsLoading(false);
-        if (!user && !hasRedirectedRef.current) {
-          hasRedirectedRef.current = true;
-          const target = pathname || '/dashboard';
-          router.push(`/login?redirect=${encodeURIComponent(target)}`);
-        }
       }
     }, 3500);
 
     const checkAuthentication = async () => {
       try {
         // 1. Authoritative check: PostgreSQL HTTP-Only session (/api/auth/me)
-        const res = await fetch('/api/auth/me');
+        const res = await fetch('/api/auth/me', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data.authenticated && data.user) {
             if (!isCancelled) {
+              authResolvedRef.current = true;
               const mappedUser: FirestoreUser = {
                 uid: data.user.userId,
                 email: data.user.email,
@@ -78,6 +77,7 @@ export function useRequireAuth(options?: UseRequireAuthOptions) {
 
       // If not authenticated via server session
       if (!isCancelled) {
+        authResolvedRef.current = true;
         setUser(null);
         setIsLoading(false);
 
