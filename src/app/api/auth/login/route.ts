@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { eq, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, profiles, userSubscriptions, packages } from '@/db/schema';
-import { setSessionCookie, UserRole, MembershipTier } from '@/lib/auth/session';
+import { setSessionCookieOnResponse, UserRole, MembershipTier } from '@/lib/auth/session';
 import { ensureDatabaseReady } from '@/db/auto-migrate';
 
 export async function POST(req: NextRequest) {
@@ -101,24 +101,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Issue HTTP-Only JWT session cookie
-    await setSessionCookie({
-      userId: user.id,
-      email: user.email,
-      fullName: profile?.fullName || (userRole === 'SUPER_ADMIN' ? 'Chief Super Admin' : 'Valued Member'),
-      role: userRole,
-      tier,
-      profileId: profile?.profileId,
-      contactCredits,
-      dailyViewLimit,
-    });
-
     // Update last login timestamp
     await db
       .update(users)
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, user.id));
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       user: {
         userId: user.id,
@@ -128,6 +117,16 @@ export async function POST(req: NextRequest) {
         tier,
         profileId: profile?.profileId,
       },
+    });
+    return await setSessionCookieOnResponse(response, {
+      userId: user.id,
+      email: user.email,
+      fullName: profile?.fullName || (userRole === 'SUPER_ADMIN' ? 'Chief Super Admin' : 'Valued Member'),
+      role: userRole,
+      tier,
+      profileId: profile?.profileId,
+      contactCredits,
+      dailyViewLimit,
     });
   } catch (error: any) {
     console.error('API /api/auth/login error:', error);

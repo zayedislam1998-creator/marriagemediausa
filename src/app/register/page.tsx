@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Footer } from '@/components/layout/Footer';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -32,8 +31,6 @@ import {
 } from 'lucide-react';
 
 export default function RegisterPage() {
-  const router = useRouter();
-
   // Primary Account Fields
   const [profileCreatedFor, setProfileCreatedFor] = useState('Self');
   const [gender, setGender] = useState<'FEMALE' | 'MALE'>('FEMALE');
@@ -61,6 +58,20 @@ export default function RegisterPage() {
   const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [regError, setRegError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState<{
+    fullName: string;
+    destination: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!registrationSuccess) return;
+
+    const redirectTimer = window.setTimeout(() => {
+      window.location.replace(registrationSuccess.destination);
+    }, 4000);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, [registrationSuccess]);
 
   // Active country details
   const currentCountry = useMemo(() => {
@@ -197,11 +208,14 @@ export default function RegisterPage() {
       const serverData = await serverRes.json();
 
       if (serverRes.ok && serverData.success) {
-        if (serverData.user?.role === 'SUPER_ADMIN') {
-          window.location.href = '/admin?welcome=admin';
-        } else {
-          window.location.href = '/dashboard?welcome=new';
-        }
+        setRegistrationSuccess({
+          fullName: serverData.user?.fullName || fullNameTrimmed,
+          destination:
+            serverData.user?.role === 'SUPER_ADMIN'
+              ? '/admin?welcome=admin'
+              : '/dashboard?welcome=new',
+        });
+        setIsSubmitting(false);
         return;
       }
 
@@ -212,6 +226,96 @@ export default function RegisterPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (registrationSuccess) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'radial-gradient(ellipse at top, #EDFDF5 0%, #F4F7FA 75%)',
+        }}
+      >
+        <AppHeader />
+        <main
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px 20px',
+          }}
+        >
+          <section
+            role="status"
+            aria-live="polite"
+            style={{
+              width: '100%',
+              maxWidth: 560,
+              padding: '44px 32px',
+              borderRadius: 24,
+              background: '#FFFFFF',
+              boxShadow: '0 25px 60px -15px rgba(6, 78, 59, 0.2)',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                margin: '0 auto 20px',
+                borderRadius: '50%',
+                display: 'grid',
+                placeItems: 'center',
+                color: '#047857',
+                background: '#D1FAE5',
+              }}
+            >
+              <CheckCircle2 size={40} />
+            </div>
+            <p
+              style={{
+                margin: '0 0 8px',
+                color: '#047857',
+                fontSize: '0.8rem',
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+            >
+              Registration complete
+            </p>
+            <h1 style={{ margin: '0 0 12px', color: '#0F172A', fontSize: '1.8rem', fontWeight: 800 }}>
+              Congratulations, {registrationSuccess.fullName}!
+            </h1>
+            <p style={{ margin: '0 auto 24px', maxWidth: 420, color: '#475569', lineHeight: 1.65 }}>
+              Your account has been created successfully, and you are signed in. We will take you to your account in a few seconds.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.replace(registrationSuccess.destination)}
+              className="btn-3d"
+              style={{
+                minHeight: 44,
+                padding: '0 22px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              Continue to your account <ArrowRight size={16} />
+            </button>
+          </section>
+        </main>
+        <Footer />
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
     <div

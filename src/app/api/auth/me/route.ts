@@ -5,7 +5,10 @@ export async function GET() {
   try {
     const session = await getCurrentSession();
     if (!session) {
-      return NextResponse.json({ authenticated: false, user: null });
+      return NextResponse.json(
+        { authenticated: false, user: null },
+        { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+      );
     }
     return NextResponse.json({
       authenticated: true,
@@ -17,8 +20,11 @@ export async function GET() {
         tier: session.tier,
         profileId: session.profileId,
       },
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (err) {
-    return NextResponse.json({ authenticated: false, user: null });
+    return NextResponse.json(
+      { authenticated: false, user: null },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   }
 }

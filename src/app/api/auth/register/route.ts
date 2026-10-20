@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { eq, or } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, profiles, userSubscriptions, packages } from '@/db/schema';
-import { setSessionCookie, UserRole } from '@/lib/auth/session';
+import { setSessionCookieOnResponse, UserRole } from '@/lib/auth/session';
 import { ensureDatabaseReady } from '@/db/auto-migrate';
 
 export async function POST(req: NextRequest) {
@@ -61,86 +61,82 @@ export async function POST(req: NextRequest) {
     // 3. Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // 4. Create User
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        email,
-        phoneNumber,
-        passwordHash,
-        role: assignedRole,
-        isActive: true,
-        isVerified: assignedRole === 'SUPER_ADMIN',
-      })
-      .returning();
-
-    // 5. Create Profile with location details
     const profileId = `2026${Math.floor(100000 + Math.random() * 900000)}`;
-    const [newProfile] = await db
-      .insert(profiles)
-      .values({
-        userId: newUser.id,
-        profileId,
-        fullName,
-        gender,
-        lookingFor,
-        dateOfBirth: '1998-01-01',
-        age: 28,
-        heightFeetInches: "5'6\"",
-        heightCm: 168,
-        maritalStatus: 'NEVER_MARRIED',
-        religion: 'Islam',
-        sectMazhab: 'Sunni / Hanafi',
-        religiousness: 'RELIGIOUS',
-        prayFrequency: 'ALWAYS',
-        halalDiet: 'STRICTLY_HALAL',
-        educationLevel: "Bachelor's Degree",
-        profession: 'Professional',
-        countryLivingIn: country,
-        stateProvince: stateProvince || 'New York',
-        city: city || 'New York',
-        zipCode: '10001',
-        guardianName: 'Family Guardian',
-        guardianRelation: profileCreatedFor === 'Self' ? 'Father' : profileCreatedFor,
-        guardianPhone: phoneNumber,
-        aboutMe: 'Practicing Muslim looking for a pious, kind-hearted life partner to complete half our deen.',
-        whatIAmLookingFor: 'A God-fearing companion with good character and Islamic moral values.',
-        completionPercentage: 65,
-        isApproved: true,
-        kycStatus: 'NOT_SUBMITTED',
-        photoPrivacy: 'PUBLIC',
-      })
-      .returning();
+    // Keep the account, profile, and starter subscription consistent if any
+    // database operation fails during registration.
+    const { newUser, newProfile } = await db.transaction(async (tx) => {
+      const [createdUser] = await tx
+        .insert(users)
+        .values({
+          email,
+          phoneNumber,
+          passwordHash,
+          role: assignedRole,
+          isActive: true,
+          isVerified: assignedRole === 'SUPER_ADMIN',
+        })
+        .returning();
 
-    // 6. Free Subscription
-    const freePackages = await db.select().from(packages).where(eq(packages.id, 1)).limit(1);
-    if (freePackages.length > 0) {
+      if (!createdUser) throw new Error('The account could not be created. Please try again.');
+
+      const [createdProfile] = await tx
+        .insert(profiles)
+        .values({
+          userId: createdUser.id,
+          profileId,
+          fullName,
+          gender,
+          lookingFor,
+          dateOfBirth: '1998-01-01',
+          age: 28,
+          heightFeetInches: "5'6\"",
+          heightCm: 168,
+          maritalStatus: 'NEVER_MARRIED',
+          religion: 'Islam',
+          sectMazhab: 'Sunni / Hanafi',
+          religiousness: 'RELIGIOUS',
+          prayFrequency: 'ALWAYS',
+          halalDiet: 'STRICTLY_HALAL',
+          educationLevel: "Bachelor's Degree",
+          profession: 'Professional',
+          countryLivingIn: country,
+          stateProvince: stateProvince || 'New York',
+          city: city || 'New York',
+          zipCode: '10001',
+          guardianName: 'Family Guardian',
+          guardianRelation: profileCreatedFor === 'Self' ? 'Father' : profileCreatedFor,
+          guardianPhone: phoneNumber,
+          aboutMe: 'Practicing Muslim looking for a pious, kind-hearted life partner to complete half our deen.',
+          whatIAmLookingFor: 'A God-fearing companion with good character and Islamic moral values.',
+          completionPercentage: 65,
+          isApproved: true,
+          kycStatus: 'NOT_SUBMITTED',
+          photoPrivacy: 'PUBLIC',
+        })
+        .returning();
+
+      if (!createdProfile) throw new Error('The member profile could not be created. Please try again.');
+
+      const [freePackage] = await tx.select().from(packages).where(eq(packages.id, 1)).limit(1);
+      if (!freePackage) throw new Error('The free membership package is not configured. Please contact support.');
+
       const expiresAt = new Date();
       expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-      await db.insert(userSubscriptions).values({
-        userId: newUser.id,
-        packageId: 1,
+      await tx.insert(userSubscriptions).values({
+        userId: createdUser.id,
+        packageId: freePackage.id,
         status: 'ACTIVE',
         pricePaidUsd: '0.00',
         contactCreditsRemaining: assignedRole === 'SUPER_ADMIN' ? 9999 : 0,
         expiresAt,
       });
-    }
 
-    // 7. Establish Secure Session
-    await setSessionCookie({
-      userId: newUser.id,
-      email: newUser.email,
-      fullName: newProfile.fullName,
-      role: assignedRole,
-      tier: assignedRole === 'SUPER_ADMIN' ? 'ELITE' : 'FREE',
-      profileId: newProfile.profileId,
-      contactCredits: assignedRole === 'SUPER_ADMIN' ? 9999 : 0,
-      dailyViewLimit: assignedRole === 'SUPER_ADMIN' ? 9999 : 15,
+      return { newUser: createdUser, newProfile: createdProfile };
     });
 
-    return NextResponse.json({
+    // 7. Establish Secure Session
+    const response = NextResponse.json({
       success: true,
       user: {
         userId: newUser.id,
@@ -150,6 +146,16 @@ export async function POST(req: NextRequest) {
         tier: assignedRole === 'SUPER_ADMIN' ? 'ELITE' : 'FREE',
         profileId: newProfile.profileId,
       },
+    });
+    return await setSessionCookieOnResponse(response, {
+      userId: newUser.id,
+      email: newUser.email,
+      fullName: newProfile.fullName,
+      role: assignedRole,
+      tier: assignedRole === 'SUPER_ADMIN' ? 'ELITE' : 'FREE',
+      profileId: newProfile.profileId,
+      contactCredits: assignedRole === 'SUPER_ADMIN' ? 9999 : 0,
+      dailyViewLimit: assignedRole === 'SUPER_ADMIN' ? 9999 : 15,
     });
   } catch (error: any) {
     console.error('API /api/auth/register error:', error);

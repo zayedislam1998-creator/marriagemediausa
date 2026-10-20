@@ -13,15 +13,23 @@ import { firebaseLogout } from '@/lib/firebase/authService';
  * 5. Performs a clean, hard navigation to /login?logged_out=1.
  */
 export async function executeUniversalLogout(redirectUrl: string = '/login?logged_out=1'): Promise<void> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 8000);
+
   try {
     // 1. Invalidate server-side HTTP-Only session cookie
     await fetch('/api/auth/logout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
+      signal: controller.signal,
     });
   } catch (err) {
     console.warn('[Logout] Server session clearance error:', err);
+  } finally {
+    // Continue clearing client state and navigate even if the VPS is slow.
+    // A subsequent /login?logged_out=1 request also purges any stale cookie.
+    window.clearTimeout(timeout);
   }
 
   try {

@@ -8,9 +8,7 @@ import { db } from '@/db';
 import { users, profiles, userSubscriptions, packages, userPhotos } from '@/db/schema';
 import {
   setSessionCookie,
-  clearSessionCookie,
   getCurrentSession,
-  SessionPayload,
   UserRole,
   MembershipTier,
 } from './session';
@@ -320,14 +318,6 @@ export async function signUpAction(prevState: any, formData: FormData) {
       error: error.message || 'Failed to create your account. Please try again.',
     };
   }
-}
-
-/**
- * Sign Out Action
- */
-export async function signOutAction() {
-  await clearSessionCookie();
-  redirect('/login');
 }
 
 /**

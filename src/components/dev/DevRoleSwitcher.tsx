@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { switchDevSeatAction, signOutAction } from '@/lib/auth/actions';
+import { switchDevSeatAction } from '@/lib/auth/actions';
+import { executeUniversalLogout } from '@/lib/auth/universalLogout';
 import { Shield, Sparkles, User, LogOut, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface DevRoleSwitcherProps {
@@ -26,13 +27,7 @@ export function DevRoleSwitcher({ currentRole, currentEmail }: DevRoleSwitcherPr
 
   const handleSignOut = async () => {
     setIsPending(true);
-    try {
-      await signOutAction();
-    } catch (e) {
-      // Next.js redirect
-    } finally {
-      setIsPending(false);
-    }
+    await executeUniversalLogout('/login?logged_out=1');
   };
 
   return (

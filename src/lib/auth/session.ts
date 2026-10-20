@@ -81,6 +81,27 @@ export async function setSessionCookie(payload: SessionPayload): Promise<void> {
 }
 
 /**
+ * Sets the session on the exact response returned by a Route Handler.
+ * This keeps authentication cookies attached to the JSON response that the
+ * browser is awaiting before it navigates to a protected page.
+ */
+export async function setSessionCookieOnResponse(
+  response: NextResponse,
+  payload: SessionPayload
+): Promise<NextResponse> {
+  const token = await createSessionToken(payload);
+  response.cookies.set(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: SESSION_DURATION,
+    path: '/',
+  });
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  return response;
+}
+
+/**
  * Clears the session cookie
  */
 export async function clearSessionCookie(): Promise<void> {
