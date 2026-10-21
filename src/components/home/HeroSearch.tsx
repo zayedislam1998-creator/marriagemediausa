@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  Heart,
   UserPlus,
 } from 'lucide-react';
 import { Country, USState } from '@/db/repository';
@@ -22,21 +21,28 @@ interface HeroSearchProps {
   professions: string[];
   heroCopy?: { tagline?: string; subtitle?: string };
   campaignBanners?: Array<{ id: string; name: string; placement: string; targetRegion: string; active: boolean }>;
-  onSearch?: (criteria: any) => void;
+  onSearch?: (criteria: {
+    gender: string;
+    minAge: number;
+    maxAge: number;
+    country: string;
+    language: string;
+    profession: string;
+  }) => void;
 }
 
 const HERO_SLIDES = [
   {
     id: 1,
     image: '/images/slider/Marriage_Muslim.webp',
-    badge: '☪ #1 Worldwide Halal Matrimonial & Matchmaking Site',
+    badge: '☪ Halal Matrimonial & Matchmaking',
     title: 'Are You Waiting For Someone Special?',
     highlight: 'Complete Half Your Deen With Barakah',
     subtitle:
       'Connecting practicing Muslim brides and grooms across the USA, Bangladesh, UK, Canada, and worldwide with 10-Level Profile Verification and verified family Walis.',
     cardHeading: 'Begin Your Sacred Journey',
-    cardSubtext: 'Over 15,420+ practicing Muslim singles seeking pious life partners for Sunnah Nikkah.',
-    stats: '15,420+ Active Biodatas',
+    cardSubtext: 'Search member profiles and connect with marriage-minded Muslim families.',
+    stats: 'Member Profiles',
     bismillahText: 'بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
     bismillahFont: 'var(--font-arabic-ruqaa)',
     bismillahStyleName: "Royal Ruq'ah Calligraphy",
@@ -51,9 +57,9 @@ const HERO_SLIDES = [
     highlight: 'And My Only Forever Companion',
     subtitle:
       'Protected by our Purdah Photo Privacy Shield and mandatory Guardian (Wali) verification. Experience safe, honorable Islamic matrimony.',
-    cardHeading: '100% Halal & Guardian Verified',
-    cardSubtext: 'Strict Purdah photo privacy with direct Wali/Guardian oversight for all sisters.',
-    stats: '100% Wali Verified',
+    cardHeading: 'Family-led Matchmaking',
+    cardSubtext: 'Keep your family or guardian involved throughout the matchmaking process.',
+    stats: 'Family Involvement',
     bismillahText: 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ',
     bismillahFont: 'var(--font-arabic-naskh)',
     bismillahStyleName: 'Sacred Quranic Naskh',
@@ -63,14 +69,14 @@ const HERO_SLIDES = [
   {
     id: 3,
     image: '/images/slider/LOVE-love.webp',
-    badge: '🌟 Trusted by Thousands of Muslim Families',
+    badge: '🌟 Family-led Muslim Matchmaking',
     title: 'I Love My Wife & Would Do Anything For Her',
     highlight: 'Where Two Families Unite in Faith',
     subtitle:
       'From Doctors, Engineers, and IT Professionals to Islamic Scholars—find your ideal life partner by profession, mother tongue, city, or country.',
     cardHeading: 'Educated & Pious Matches',
-    cardSubtext: 'Physicians, Tech Leaders, Scholars & Entrepreneurs across US diaspora & abroad.',
-    stats: '3,890+ Blessed Nikkahs',
+    cardSubtext: 'Explore profiles using profession, mother tongue, city, or country.',
+    stats: 'Family-led Matches',
     bismillahText: 'بِسْمِ اللَّهِ الرَّحْمٰنِ الرَّحِيْمِ',
     bismillahFont: 'var(--font-arabic-nastaliq)',
     bismillahStyleName: "Cascading Nasta'liq Script",
@@ -80,14 +86,14 @@ const HERO_SLIDES = [
   {
     id: 4,
     image: '/images/slider/wedding.webp',
-    badge: '🛡️ World’s Highest 10-Level Profile Verification',
+    badge: '🛡️ Profile Review & Safety',
     title: '100% Free Registration & Verified Biodatas',
     highlight: 'No Gimmicks • Genuine Marriage Intentions',
     subtitle:
       'Every profile is screened across Name, Parent/Wali, Photograph, National ID/Passport, Education, and Profession for complete peace of mind.',
-    cardHeading: 'Zero Fake Profiles Guaranteed',
-    cardSubtext: 'Authentic 10-stage human KYC verification before any biodata goes public.',
-    stats: 'Strict 10-Level KYC',
+    cardHeading: 'Profile Review & Verification',
+    cardSubtext: 'Profile review and verification support for a safer matchmaking experience.',
+    stats: 'Profile Review',
     bismillahText: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
     bismillahFont: 'var(--font-arabic-kufi)',
     bismillahStyleName: 'Monumental Kufic Script',
@@ -103,8 +109,8 @@ const HERO_SLIDES = [
     subtitle:
       'Join MuslimBibah.com today for free, create your 85+ field Islamic biodata, and express interest to verified suitors worldwide.',
     cardHeading: 'Gateway to Happy Marriages',
-    cardSubtext: 'Create your comprehensive 85+ field Islamic biodata in under 3 minutes for free.',
-    stats: '100% Free Lifetime',
+    cardSubtext: 'Create a profile and start exploring membership options.',
+    stats: 'Free Registration',
     bismillahText: 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ',
     bismillahFont: 'var(--font-arabic-thuluth)',
     bismillahStyleName: 'Grand Thuluth Scripture',

@@ -3,16 +3,10 @@ import { Footer } from '@/components/layout/Footer';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { PricingSection } from '@/components/home/PricingSection';
 import { Crown } from 'lucide-react';
-import { getAllPackagesFromDb } from '@/db/queries';
-import { connection } from 'next/server';
 
 export const instant = false;
 
-export default async function MembershipPlanPage() {
-  await connection();
-  const allPackages = await getAllPackagesFromDb().catch(() => []);
-  const activePackages = allPackages.filter((p: any) => p.isActive);
-
+export default function MembershipPlanPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-app)', display: 'flex', flexDirection: 'column' }}>
       <AppHeader />
@@ -29,7 +23,7 @@ export default async function MembershipPlanPage() {
           </p>
         </div>
       </section>
-      <PricingSection packages={activePackages} />
+      <PricingSection packages={[]} />
       <Footer />
       <BottomNav />
     </div>

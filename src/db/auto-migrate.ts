@@ -1,8 +1,6 @@
-import { client, db } from './index';
+import { client } from './index';
 import bcrypt from 'bcryptjs';
 import domainSeed from '../../seed-data/muslimbibah_domain_seed.json';
-import { packages, users } from './schema';
-import { eq } from 'drizzle-orm';
 
 let migrationPromise: Promise<void> | null = null;
 
@@ -27,11 +25,9 @@ export async function ensureDatabaseReady(): Promise<void> {
 export async function runAutoMigration(): Promise<void> {
   console.log('[Auto-Migrate] Checking and initializing database schema...');
 
-  // 1. Extensions
-  await client`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`.catch(() => {});
-  await client`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`.catch(() => {});
+  // PostgreSQL 13+ provides gen_random_uuid() without extensions.
 
-  // 2. Safe Enums
+  // 1. Safe Enums
   const safeEnums = [
     { name: 'body_type_enum', values: ['SLIM', 'AVERAGE', 'ATHLETIC', 'HEAVY'] },
     { name: 'complexion_enum', values: ['VERY_FAIR', 'FAIR', 'WHEATISH', 'WHEATISH_MEDIUM', 'WHEATISH_BROWN', 'DARK'] },
@@ -85,12 +81,12 @@ export async function runAutoMigration(): Promise<void> {
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   await client.unsafe(`
     ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "invite_token" varchar(255);
     ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "invite_expires_at" timestamp with time zone;
-  `).catch(console.error);
+  `);
 
   // Table: packages
   await client.unsafe(`
@@ -106,7 +102,7 @@ export async function runAutoMigration(): Promise<void> {
       "is_active" boolean DEFAULT true NOT NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: profiles
   await client.unsafe(`
@@ -183,7 +179,7 @@ export async function runAutoMigration(): Promise<void> {
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: user_subscriptions
   await client.unsafe(`
@@ -199,7 +195,7 @@ export async function runAutoMigration(): Promise<void> {
       "payment_reference" varchar(100),
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: partner_preferences
   await client.unsafe(`
@@ -223,7 +219,7 @@ export async function runAutoMigration(): Promise<void> {
       "drink" "smoke_drink_enum" DEFAULT 'NO',
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: user_photos
   await client.unsafe(`
@@ -238,7 +234,7 @@ export async function runAutoMigration(): Promise<void> {
       "sort_order" integer DEFAULT 0,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: audit_logs
   await client.unsafe(`
@@ -251,7 +247,7 @@ export async function runAutoMigration(): Promise<void> {
       "meta" jsonb,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: proposals
   await client.unsafe(`
@@ -265,7 +261,7 @@ export async function runAutoMigration(): Promise<void> {
       "responded_at" timestamp with time zone,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: conversations
   await client.unsafe(`
@@ -276,7 +272,7 @@ export async function runAutoMigration(): Promise<void> {
       "is_active" boolean DEFAULT true NOT NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: messages
   await client.unsafe(`
@@ -288,7 +284,7 @@ export async function runAutoMigration(): Promise<void> {
       "is_read" boolean DEFAULT false NOT NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: member_resumes
   await client.unsafe(`
@@ -305,7 +301,7 @@ export async function runAutoMigration(): Promise<void> {
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: profile_requirements_config
   await client.unsafe(`
@@ -321,7 +317,7 @@ export async function runAutoMigration(): Promise<void> {
       "is_active" boolean DEFAULT true NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: form_builder_configs
   await client.unsafe(`
@@ -334,7 +330,7 @@ export async function runAutoMigration(): Promise<void> {
       "fields_json" jsonb NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: payment_gateways_config
   await client.unsafe(`
@@ -353,7 +349,7 @@ export async function runAutoMigration(): Promise<void> {
       "last_test_message" text,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: payment_transactions
   await client.unsafe(`
@@ -375,7 +371,7 @@ export async function runAutoMigration(): Promise<void> {
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: wallet_ledger
   await client.unsafe(`
@@ -388,7 +384,7 @@ export async function runAutoMigration(): Promise<void> {
       "notes" text,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: processed_webhook_events
   await client.unsafe(`
@@ -398,7 +394,7 @@ export async function runAutoMigration(): Promise<void> {
       "event_type" varchar(100) NOT NULL,
       "processed_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: bookmarks
   await client.unsafe(`
@@ -408,7 +404,7 @@ export async function runAutoMigration(): Promise<void> {
       "bookmarked_profile_id" uuid NOT NULL REFERENCES "profiles"("id") ON DELETE CASCADE,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: profile_views
   await client.unsafe(`
@@ -418,7 +414,7 @@ export async function runAutoMigration(): Promise<void> {
       "viewed_profile_id" uuid NOT NULL REFERENCES "profiles"("id") ON DELETE CASCADE,
       "viewed_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: photo_access_requests
   await client.unsafe(`
@@ -429,7 +425,7 @@ export async function runAutoMigration(): Promise<void> {
       "status" "request_status_enum" DEFAULT 'PENDING' NOT NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: contact_unlock_requests
   await client.unsafe(`
@@ -441,7 +437,7 @@ export async function runAutoMigration(): Promise<void> {
       "credit_deducted" integer DEFAULT 1 NOT NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: kyc_verifications
   await client.unsafe(`
@@ -457,7 +453,7 @@ export async function runAutoMigration(): Promise<void> {
       "reviewed_at" timestamp with time zone,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: moderation_reports
   await client.unsafe(`
@@ -471,7 +467,7 @@ export async function runAutoMigration(): Promise<void> {
       "assigned_to" uuid REFERENCES "users"("id") ON DELETE SET NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: success_stories
   await client.unsafe(`
@@ -486,7 +482,7 @@ export async function runAutoMigration(): Promise<void> {
       "created_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
       "created_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: contact_submissions (Durable inbox for Contact & Wedding inquiries)
   await client.unsafe(`
@@ -505,7 +501,7 @@ export async function runAutoMigration(): Promise<void> {
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: cms_articles (Durable CMS articles and Islamic advice hub)
   await client.unsafe(`
@@ -524,7 +520,7 @@ export async function runAutoMigration(): Promise<void> {
       "created_at" timestamp with time zone DEFAULT now() NOT NULL,
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
-  `).catch(console.error);
+  `);
 
   // Table: cms_page_sections (Durable CMS content for all pages, FAQs, banners, and SEO)
   await client.unsafe(`
@@ -539,11 +535,11 @@ export async function runAutoMigration(): Promise<void> {
       "updated_at" timestamp with time zone DEFAULT now() NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS "unique_page_section" ON "cms_page_sections" ("page_key", "section_key");
-  `).catch(console.error);
+  `);
 
   // Add column migrations for users (one-time setup invite token)
-  await client.unsafe(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "invite_token" varchar(255);`).catch(() => {});
-  await client.unsafe(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "invite_expires_at" timestamp with time zone;`).catch(() => {});
+  await client.unsafe(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "invite_token" varchar(255);`);
+  await client.unsafe(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "invite_expires_at" timestamp with time zone;`);
 
 
   // Essential Indexes (Safe)
@@ -567,7 +563,7 @@ export async function runAutoMigration(): Promise<void> {
   ];
 
   for (const idxSql of safeIndexes) {
-    await client.unsafe(idxSql).catch(() => {});
+    await client.unsafe(idxSql);
   }
 
   // 4. Default Package Seeding

@@ -20,7 +20,6 @@ import {
   getPublicProfilesFromDb,
   getCmsArticlesFromDb,
   getSuccessStoriesFromDb,
-  getAllPackagesFromDb,
   getCmsPageSectionFromDb,
 } from '@/db/queries';
 import { connection } from 'next/server';
@@ -37,7 +36,6 @@ export default async function HomePage() {
     dbProfiles,
     dbArticles,
     dbStories,
-    allPackages,
     faqSection,
     heroBannerSection,
     heroCopySection,
@@ -45,18 +43,18 @@ export default async function HomePage() {
     getPublicProfilesFromDb().catch(() => []),
     getCmsArticlesFromDb().catch(() => []),
     getSuccessStoriesFromDb().catch(() => []),
-    getAllPackagesFromDb().catch(() => []),
     getCmsPageSectionFromDb('faq', 'general_faq').catch(() => null),
     getCmsPageSectionFromDb('home', 'hero_banners').catch(() => null),
     getCmsPageSectionFromDb('home', 'hero_copy').catch(() => null),
   ]);
 
-  const activePackages = allPackages.filter((p: any) => p.isActive);
   const heroCopy = heroCopySection?.contentJson as { tagline?: string; subtitle?: string } | undefined;
   const campaignBanners = Array.isArray(heroBannerSection?.contentJson)
     ? (heroBannerSection.contentJson as Array<{ id: string; name: string; placement: string; targetRegion: string; active: boolean }>)
     : undefined;
-  const faqs = Array.isArray(faqSection?.contentJson) ? (faqSection.contentJson as any[]) : undefined;
+  const faqs = Array.isArray(faqSection?.contentJson)
+    ? (faqSection.contentJson as Array<{ question?: string; answer?: string; active?: boolean }>)
+    : undefined;
 
   return (
     <div className="page-main" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-app)' }}>
@@ -94,7 +92,7 @@ export default async function HomePage() {
       <SuccessStoriesWall stories={dbStories} />
 
       {/* 10. Transparent Membership Packages ($0, $2,000, $3,000, $4,000, $6,500) */}
-      <PricingSection packages={activePackages} />
+      <PricingSection packages={[]} />
 
       {/* 11. SEO Deep Directory Matrix (By Profession, Mother Tongue, US City, Sect) */}
       <SeoDirectoryMatrix />

@@ -1,227 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { and, eq } from 'drizzle-orm';
 import { GatewayConfigService } from '@/lib/payments/gatewayConfigService';
+import { getCurrentSession } from '@/lib/auth/session';
 import { db } from '@/db';
-import { packages, paymentTransactions, userSubscriptions, walletLedger, users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { packages, paymentTransactions, users } from '@/db/schema';
+
+const walletPacks: Record<number, number> = { 10: 15, 30: 35, 80: 75, 200: 150 };
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getCurrentSession();
+    if (!session) return NextResponse.json({ success: false, error: 'Please sign in before checkout.' }, { status: 401 });
+    const [user] = await db.select().from(users).where(and(eq(users.id, session.userId), eq(users.isActive, true))).limit(1);
+    if (!user) return NextResponse.json({ success: false, error: 'Account is unavailable.' }, { status: 403 });
+
     const body = await req.json();
-    const {
-      userId,
-      userEmail,
-      type,
-      packageId,
-      credits,
-      customAmount,
-      profileToken,
-      payerName,
-      payerPhone,
-      city,
-      stateProvince,
-      country,
-      postalCode,
-    } = body;
+    const { type, packageId, credits } = body;
+    let title: string;
+    let description: string;
+    let amountUsd: number;
+    let targetCredits = 0;
+    let selectedPackage: typeof packages.$inferSelect | null = null;
 
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'User is not authenticated' }, { status: 401 });
-    }
-
-    // Ensure targetUserId is a valid UUID in PostgreSQL
-    let targetUserId = userId;
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
-    if (!isUuid) {
-      if (userEmail) {
-        const [matchedUser] = await db.select().from(users).where(eq(users.email, userEmail));
-        if (matchedUser) {
-          targetUserId = matchedUser.id;
-        } else {
-          const [firstUser] = await db.select().from(users).limit(1);
-          if (firstUser) targetUserId = firstUser.id;
-        }
-      } else {
-        const [firstUser] = await db.select().from(users).limit(1);
-        if (firstUser) targetUserId = firstUser.id;
-      }
+    if (type === 'MEMBERSHIP_SUBSCRIPTION') {
+      const id = Number(packageId);
+      if (!Number.isInteger(id) || id < 1) return NextResponse.json({ success: false, error: 'Choose a valid membership package.' }, { status: 400 });
+      const [pkg] = await db.select().from(packages).where(and(eq(packages.id, id), eq(packages.isActive, true))).limit(1);
+      if (!pkg) return NextResponse.json({ success: false, error: 'This membership package is unavailable.' }, { status: 404 });
+      if (Number(pkg.priceUsd) <= 0) return NextResponse.json({ success: false, error: 'Free packages do not need payment checkout.' }, { status: 400 });
+      selectedPackage = pkg;
+      title = `MuslimBibah: ${pkg.name}`;
+      description = `${pkg.durationMonths} month(s) • ${pkg.contactCredits} contact credits • ${pkg.dailyProfileViewLimit} daily profile views`;
+      amountUsd = Number(pkg.priceUsd);
+      targetCredits = pkg.contactCredits;
+    } else if (type === 'WALLET_TOPUP') {
+      targetCredits = Number(credits);
+      if (!walletPacks[targetCredits]) return NextResponse.json({ success: false, error: 'Choose one of the available credit packs.' }, { status: 400 });
+      amountUsd = walletPacks[targetCredits];
+      title = `MuslimBibah: ${targetCredits} Contact Credits`;
+      description = 'Contact unlock credits';
+    } else {
+      return NextResponse.json({ success: false, error: 'Invalid payment type.' }, { status: 400 });
     }
 
     const config = await GatewayConfigService.getGatewayConfig('STRIPE');
-    if (!config || !config.isActive) {
-      return NextResponse.json(
-        { success: false, error: 'Stripe gateway is currently disabled by administrator' },
-        { status: 400 }
-      );
+    if (!config?.isActive || !config.secretKey || !config.webhookSecret || config.secretKey.toLowerCase().includes('placeholder')) {
+      return NextResponse.json({ success: false, error: 'Stripe is not configured for checkout. An administrator must add and verify the gateway credentials.' }, { status: 503 });
+    }
+    const expectedPrefix = config.mode === 'LIVE' ? 'sk_live_' : 'sk_test_';
+    if (!config.secretKey.startsWith(expectedPrefix)) {
+      return NextResponse.json({ success: false, error: `Stripe ${config.mode} mode does not match the configured secret key.` }, { status: 503 });
     }
 
-    const secretKey = config.secretKey;
-    const isMockOrPlaceholder = !secretKey || secretKey.includes('placeholder') || secretKey.startsWith('sk_test_placeholder');
-
-    let title = '';
-    let description = '';
-    let amountUsd = 0;
-    let targetCredits = 0;
-    let durationMonths = 1;
-
-    if (type === 'MEMBERSHIP_SUBSCRIPTION') {
-      if (!packageId) {
-        return NextResponse.json({ success: false, error: 'Package ID is required' }, { status: 400 });
-      }
-
-      const [pkg] = await db.select().from(packages).where(eq(packages.id, Number(packageId)));
-      if (!pkg) {
-        return NextResponse.json({ success: false, error: 'Package not found in database' }, { status: 404 });
-      }
-
-      title = `MuslimBibah: ${pkg.name}`;
-      description = `${pkg.name} (${pkg.durationMonths} Months) • ${pkg.contactCredits} Contact Credits • ${pkg.dailyProfileViewLimit} Daily Views`;
-      amountUsd = parseFloat(pkg.priceUsd);
-      targetCredits = pkg.contactCredits;
-      durationMonths = pkg.durationMonths;
-    } else if (type === 'WALLET_TOPUP') {
-      targetCredits = Number(credits) || 10;
-      amountUsd = Number(customAmount) || (targetCredits === 10 ? 15 : targetCredits === 30 ? 35 : targetCredits === 80 ? 75 : 150);
-      title = `MuslimBibah: ${targetCredits} Contact Credits Pack`;
-      description = `Instant unlock credits for candidate and guardian (Wali) phone numbers`;
-    } else {
-      return NextResponse.json({ success: false, error: 'Invalid payment type' }, { status: 400 });
-    }
-
-    // Origin for redirect URLs
-    const origin = req.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
-    const payerSnapshot = {
-      profileToken: profileToken || null,
-      payerName: payerName || null,
-      payerEmail: userEmail || null,
-      payerPhone: payerPhone || null,
-      city: city || null,
-      stateProvince: stateProvince || null,
-      country: country || null,
-      postalCode: postalCode || null,
-    };
-
-    // In local sandbox or when keys are placeholders, provide instant test fulfillment
-    if (isMockOrPlaceholder) {
-      const mockTxId = `sim_stripe_${Date.now()}`;
-      await db.transaction(async (tx) => {
-        const [txn] = await tx.insert(paymentTransactions).values({
-          userId: targetUserId,
-          gateway: 'STRIPE',
-          gatewayTransactionId: mockTxId,
-          amount: amountUsd.toFixed(2),
-          feeAmount: '0.00',
-          netAmount: amountUsd.toFixed(2),
-          currency: 'USD',
-          status: 'COMPLETED',
-          paymentType: type,
-          packageId: packageId ? Number(packageId) : null,
-          creditsPurchased: targetCredits,
-          rawPayload: { simulated: true, note: 'Simulated Sandbox Execution', payerDetails: payerSnapshot },
-        }).returning();
-
-        if (type === 'MEMBERSHIP_SUBSCRIPTION' && packageId) {
-          const expiresAt = new Date();
-          expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
-
-          const [existingSub] = await tx.select().from(userSubscriptions).where(eq(userSubscriptions.userId, targetUserId));
-          if (existingSub) {
-            await tx.update(userSubscriptions).set({
-              packageId: Number(packageId),
-              status: 'ACTIVE',
-              contactCreditsRemaining: existingSub.contactCreditsRemaining + targetCredits,
-              expiresAt,
-              paymentReference: mockTxId,
-            }).where(eq(userSubscriptions.id, existingSub.id));
-          } else {
-            await tx.insert(userSubscriptions).values({
-              userId: targetUserId,
-              packageId: Number(packageId),
-              status: 'ACTIVE',
-              pricePaidUsd: amountUsd.toFixed(2),
-              contactCreditsRemaining: targetCredits,
-              expiresAt,
-              paymentReference: mockTxId,
-            });
-          }
-        }
-
-        if (targetCredits > 0) {
-          await tx.insert(walletLedger).values({
-            userId: targetUserId,
-            transactionType: type === 'MEMBERSHIP_SUBSCRIPTION' ? 'PACKAGE_ALLOWANCE' : 'CREDIT_PURCHASE',
-            amount: targetCredits,
-            notes: `${title} grant`,
-          });
-        }
-      });
-
-      return NextResponse.json({
-        success: true,
-        isSimulated: true,
-        message: 'Sandbox transaction simulated instantly! Credits & package activated.',
-        url: `${origin}/dashboard?payment=success&simulated=true`,
-      });
-    }
-
-    // Live / Sandbox Stripe API
-    const stripe = new Stripe(secretKey, {
-      apiVersion: '2025-02-24.acacia' as any,
-    });
-
-    const session = await stripe.checkout.sessions.create({
-      customer_email: userEmail || undefined,
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: title,
-              description: description,
-            },
-            unit_amount: Math.round(amountUsd * 100), // in cents
-          },
-          quantity: 1,
-        },
-      ],
+    const stripe = new Stripe(config.secretKey);
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+    const checkout = await stripe.checkout.sessions.create({
       mode: 'payment',
-      success_url: `${origin}/dashboard?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/dashboard?payment=cancelled`,
-      client_reference_id: targetUserId,
+      customer_email: user.email,
+      client_reference_id: user.id,
+      line_items: [{ price_data: { currency: 'usd', product_data: { name: title, description }, unit_amount: Math.round(amountUsd * 100) }, quantity: 1 }],
+      success_url: `${appUrl}/dashboard?payment=processing&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/dashboard?payment=cancelled`,
       metadata: {
-        userId: targetUserId,
-        packageId: packageId ? String(packageId) : '',
+        userId: user.id,
         type,
+        packageId: selectedPackage ? String(selectedPackage.id) : '',
         credits: String(targetCredits),
-        durationMonths: String(durationMonths),
-        profileToken: profileToken ? String(profileToken) : '',
-        payerName: payerName ? String(payerName) : '',
-        payerPhone: payerPhone ? String(payerPhone) : '',
-        location: [city, stateProvince, country].filter(Boolean).join(', '),
+        durationMonths: selectedPackage ? String(selectedPackage.durationMonths) : '0',
       },
     });
 
-    // Record pending transaction
     await db.insert(paymentTransactions).values({
-      userId: targetUserId,
+      userId: user.id,
       gateway: 'STRIPE',
-      gatewayTransactionId: session.id,
+      gatewayTransactionId: checkout.id,
       amount: amountUsd.toFixed(2),
       currency: 'USD',
       status: 'PENDING',
       paymentType: type,
-      packageId: packageId ? Number(packageId) : null,
+      packageId: selectedPackage?.id ?? null,
       creditsPurchased: targetCredits,
-      rawPayload: { sessionId: session.id, created: session.created, payerDetails: payerSnapshot },
+      rawPayload: {
+        checkoutSessionId: checkout.id,
+        mode: config.mode,
+        packageSnapshot: selectedPackage ? {
+          id: selectedPackage.id,
+          name: selectedPackage.name,
+          durationMonths: selectedPackage.durationMonths,
+          contactCredits: selectedPackage.contactCredits,
+          priceUsd: amountUsd.toFixed(2),
+        } : null,
+      },
     }).onConflictDoNothing();
 
-    return NextResponse.json({
-      success: true,
-      url: session.url,
-      sessionId: session.id,
-    });
-  } catch (error: any) {
+    return NextResponse.json({ success: true, url: checkout.url, sessionId: checkout.id });
+  } catch (error) {
     console.error('Error creating Stripe Checkout session:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Could not start secure checkout. Please try again.' }, { status: 500 });
   }
 }

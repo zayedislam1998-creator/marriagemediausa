@@ -2,19 +2,31 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Check, Crown, ShieldCheck, Sparkles, Gift, ArrowRight } from 'lucide-react';
-import { Package, DomainRepository } from '@/db/repository';
+import { Check, Crown, Gift, ArrowRight } from 'lucide-react';
 import { useCrossTabSync } from '@/lib/sync/broadcastSync';
 
+interface PricingPackage {
+  id: number;
+  name: string;
+  duration_months?: number;
+  durationMonths?: number;
+  price_usd?: number;
+  priceUsd?: number;
+  contact_credits?: number;
+  contactCredits?: number;
+  badge_title?: string;
+  badgeTitle?: string;
+  features?: string[];
+  featuresJson?: string[];
+}
+
 interface PricingSectionProps {
-  packages: Package[];
+  packages: PricingPackage[];
 }
 
 export function PricingSection({ packages: initialPackages }: PricingSectionProps) {
-  const [displayPackages, setDisplayPackages] = useState<any[]>(() => {
-    if (initialPackages && initialPackages.length > 0) return initialPackages;
-    return DomainRepository.getPackages();
-  });
+  const [displayPackages, setDisplayPackages] = useState<PricingPackage[]>(initialPackages ?? []);
+  const [isLoadingPackages, setIsLoadingPackages] = useState(true);
   const [showAllFreeFeatures, setShowAllFreeFeatures] = useState(false);
   const [packageLoadError, setPackageLoadError] = useState<string | null>(null);
 
@@ -24,26 +36,23 @@ export function PricingSection({ packages: initialPackages }: PricingSectionProp
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
-        if (data.success && Array.isArray(data.packages) && data.packages.length > 0) {
+        if (data.success && Array.isArray(data.packages)) {
           setDisplayPackages(data.packages);
           setPackageLoadError(null);
           return;
         }
       }
-      if (!initialPackages || initialPackages.length === 0) {
-        setDisplayPackages(DomainRepository.getPackages());
-      }
-      setPackageLoadError(null);
+      setPackageLoadError('Membership plans are temporarily unavailable. Please try again shortly.');
     } catch {
-      if (!initialPackages || initialPackages.length === 0) {
-        setDisplayPackages(DomainRepository.getPackages());
-      }
-      setPackageLoadError(null);
+      setPackageLoadError('Membership plans are temporarily unavailable. Please try again shortly.');
+    } finally {
+      setIsLoadingPackages(false);
     }
   };
 
   useEffect(() => {
-    fetchLivePackages();
+    const timer = window.setTimeout(() => void fetchLivePackages(), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Real-time synchronization when admin adds or modifies packages
@@ -104,6 +113,18 @@ export function PricingSection({ packages: initialPackages }: PricingSectionProp
           <div role="status" style={{ textAlign: 'center', padding: 18, marginBottom: 20, borderRadius: 12, background: '#FEF2F2', color: '#991B1B' }}>
             {packageLoadError}
           </div>
+        )}
+
+        {isLoadingPackages && displayPackages.length === 0 && (
+          <p role="status" style={{ textAlign: 'center', padding: 18, color: 'var(--text-muted)' }}>
+            Loading current membership plans…
+          </p>
+        )}
+
+        {!isLoadingPackages && !packageLoadError && displayPackages.length === 0 && (
+          <p role="status" style={{ textAlign: 'center', padding: 18, color: 'var(--text-muted)' }}>
+            No membership plans are currently available.
+          </p>
         )}
 
         {/* 3D Pricing Cards Grid (Swipe on Mobile, Multi-Col on Desktop) */}
