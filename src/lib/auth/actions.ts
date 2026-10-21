@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { redirect } from 'next/navigation';
-import { eq, or } from 'drizzle-orm';
+import { and, desc, eq, gt, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { users, profiles, userSubscriptions, packages, userPhotos } from '@/db/schema';
 import {
@@ -22,10 +22,10 @@ const signUpSchema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
   email: z.string().email('Valid email address is required'),
   phoneNumber: z.string().min(7, 'Phone number is required'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
   gender: z.enum(['MALE', 'FEMALE']),
   lookingFor: z.enum(['MALE', 'FEMALE']),
-  adminPasscode: z.string().optional(),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth is required'),
 });
 
 /**
@@ -71,22 +71,12 @@ export async function signInAction(prevState: any, formData: FormData) {
       };
     }
 
-    // 2. Validate password with bcrypt (or master fallback for demo accounts)
+    // Passwords are accepted only when they match this account's password hash.
     let isPasswordValid = false;
     try {
       isPasswordValid = await bcrypt.compare(rawData.password, user.passwordHash);
     } catch {
       isPasswordValid = false;
-    }
-
-    // Master credential fallback for seeded administrative demo
-    if (!isPasswordValid) {
-      if (
-        (user.email === 'admin@marriagemediausa.com' && rawData.password === 'Admin@MarriageMedia2026') ||
-        rawData.password === 'Salam2026!'
-      ) {
-        isPasswordValid = true;
-      }
     }
 
     if (!isPasswordValid) {
@@ -111,7 +101,8 @@ export async function signInAction(prevState: any, formData: FormData) {
       })
       .from(userSubscriptions)
       .leftJoin(packages, eq(userSubscriptions.packageId, packages.id))
-      .where(eq(userSubscriptions.userId, user.id))
+      .where(and(eq(userSubscriptions.userId, user.id), eq(userSubscriptions.status, 'ACTIVE'), gt(userSubscriptions.expiresAt, new Date())))
+      .orderBy(desc(userSubscriptions.startedAt))
       .limit(1);
 
     const userRole = user.role as UserRole;
@@ -126,10 +117,11 @@ export async function signInAction(prevState: any, formData: FormData) {
     } else if (sub?.pkg) {
       contactCredits = sub.sub.contactCreditsRemaining;
       dailyViewLimit = sub.pkg.dailyProfileViewLimit;
-      if (sub.pkg.name.includes('Silver')) tier = 'SILVER';
-      else if (sub.pkg.name.includes('Gold')) tier = 'GOLD';
-      else if (sub.pkg.name.includes('Diamond')) tier = 'PLATINUM';
-      else if (sub.pkg.name.includes('Royal')) tier = 'ELITE';
+      const packageName = sub.pkg.name.toUpperCase();
+      if (packageName.includes('SILVER')) tier = 'SILVER';
+      else if (packageName.includes('GOLD')) tier = 'GOLD';
+      else if (packageName.includes('DIAMOND')) tier = 'PLATINUM';
+      else if (packageName.includes('ELITE') || packageName.includes('ROYAL')) tier = 'ELITE';
     }
 
     // 5. Issue secure HTTP-Only JWT Cookie
@@ -170,7 +162,7 @@ export async function signInAction(prevState: any, formData: FormData) {
 }
 
 /**
- * Real PostgreSQL Sign Up Action with Automatic / Passcode Admin Appointment
+ * Legacy form-action signup path; keep its DB behavior aligned with API signup.
  */
 export async function signUpAction(prevState: any, formData: FormData) {
   const rawData = {
@@ -178,9 +170,9 @@ export async function signUpAction(prevState: any, formData: FormData) {
     email: formData.get('email')?.toString() || '',
     phoneNumber: formData.get('phoneNumber')?.toString() || '',
     password: formData.get('password')?.toString() || '',
+    dateOfBirth: formData.get('dateOfBirth')?.toString() || '',
     gender: formData.get('gender')?.toString() || 'FEMALE',
     lookingFor: formData.get('lookingFor')?.toString() || 'MALE',
-    adminPasscode: formData.get('adminPasscode')?.toString() || '',
     country: formData.get('country')?.toString() || 'United States',
     stateProvince: formData.get('stateProvince')?.toString() || '',
     city: formData.get('city')?.toString() || '',
@@ -196,14 +188,22 @@ export async function signUpAction(prevState: any, formData: FormData) {
   }
 
   const emailLower = rawData.email.toLowerCase().trim();
-  const phoneClean = rawData.phoneNumber.trim();
+  const phoneDigits = rawData.phoneNumber.replace(/\D/g, '');
+  const phoneClean = `+${phoneDigits}`;
+  const birthDate = new Date(`${rawData.dateOfBirth}T00:00:00.000Z`);
+  const today = new Date();
+  const validBirthDate = !Number.isNaN(birthDate.getTime()) && birthDate.toISOString().slice(0, 10) === rawData.dateOfBirth;
+  const age = today.getUTCFullYear() - birthDate.getUTCFullYear() -
+    (today.getUTCMonth() < birthDate.getUTCMonth() || (today.getUTCMonth() === birthDate.getUTCMonth() && today.getUTCDate() < birthDate.getUTCDate()) ? 1 : 0);
+  if (phoneDigits.length < 7 || phoneDigits.length > 15) return { success: false, error: 'Enter a valid phone number.' };
+  if (!validBirthDate || age < 18 || birthDate > today) return { success: false, error: 'A valid date of birth is required; members must be at least 18 years old.' };
 
   try {
     // 1. Check if user already exists
     const existing = await db
       .select()
       .from(users)
-      .where(or(eq(users.email, emailLower), eq(users.phoneNumber, phoneClean)))
+      .where(or(eq(users.email, emailLower), sql`regexp_replace(${users.phoneNumber}, '[^0-9]', '', 'g') = ${phoneDigits}`))
       .limit(1);
 
     if (existing.length > 0) {
@@ -213,82 +213,49 @@ export async function signUpAction(prevState: any, formData: FormData) {
       };
     }
 
-    // 2. Role Determination:
-    // If user provides the official Admin Security Passcode ("MB-ADMIN-2026"), appoint as SUPER_ADMIN!
-    let assignedRole: UserRole = 'MEMBER';
-    if (rawData.adminPasscode && rawData.adminPasscode.trim() === 'MB-ADMIN-2026') {
-      assignedRole = 'SUPER_ADMIN';
-    }
+    const assignedRole: UserRole = 'MEMBER';
 
     // 3. Hash Password
     const passwordHash = await bcrypt.hash(rawData.password, 10);
 
-    // 4. Insert User
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        email: emailLower,
-        phoneNumber: phoneClean,
-        passwordHash,
-        role: assignedRole,
-        isActive: true,
-        isVerified: assignedRole === 'SUPER_ADMIN',
-      })
-      .returning();
-
-    // 5. Generate Matrimonial Profile
-    const profileId = `2026${Math.floor(100000 + Math.random() * 900000)}`;
-    const [newProfile] = await db
-      .insert(profiles)
-      .values({
-        userId: newUser.id,
-        profileId,
-        fullName: rawData.fullName.trim(),
-        gender: rawData.gender as 'MALE' | 'FEMALE',
-        lookingFor: rawData.lookingFor as 'MALE' | 'FEMALE',
-        dateOfBirth: '1998-01-01',
-        age: 28,
-        heightFeetInches: "5'6\"",
-        heightCm: 168,
-        maritalStatus: 'NEVER_MARRIED',
-        religion: 'Islam',
-        sectMazhab: 'Sunni / Hanafi',
-        religiousness: 'RELIGIOUS',
-        prayFrequency: 'ALWAYS',
-        halalDiet: 'STRICTLY_HALAL',
-        educationLevel: "Bachelor's Degree",
-        profession: 'Professional',
-        countryLivingIn: rawData.country || 'United States',
-        stateProvince: rawData.stateProvince || 'New York',
-        city: rawData.city || 'New York',
-        zipCode: '10001',
-        guardianName: 'Family Guardian',
-        guardianRelation: 'Father',
-        guardianPhone: phoneClean,
-        aboutMe: 'Practicing Muslim looking for a pious, kind-hearted life partner to complete half our deen.',
-        whatIAmLookingFor: 'A God-fearing companion with good character and Islamic moral values.',
-        completionPercentage: 65,
-        isApproved: true,
-        kycStatus: 'NOT_SUBMITTED',
-        photoPrivacy: 'PUBLIC',
-      })
-      .returning();
-
-    // 6. Create Free Subscription
-    const freePackages = await db.select().from(packages).where(eq(packages.id, 1)).limit(1);
-    if (freePackages.length > 0) {
+    const { newUser, newProfile, freePackage } = await db.transaction(async (tx) => {
+      const [newUser] = await tx.insert(users).values({
+        email: emailLower, phoneNumber: phoneClean, passwordHash, role: assignedRole, isActive: true, isVerified: false,
+      }).returning();
+      if (!newUser) throw new Error('The account could not be created.');
+      const profileId = `MB${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
+      const [newProfile] = await tx.insert(profiles).values({
+        userId: newUser.id, profileId, createdBy: 'self', createdFor: rawData.profileCreatedFor,
+        fullName: rawData.fullName.trim(), gender: rawData.gender as 'MALE' | 'FEMALE',
+        lookingFor: rawData.lookingFor as 'MALE' | 'FEMALE', dateOfBirth: rawData.dateOfBirth, age,
+        heightFeetInches: 'Not provided', heightCm: 0, maritalStatus: 'OTHER',
+        haveChildren: null, childLivingStatus: null, familyValues: null, fatherStatus: null, motherStatus: null,
+        brothersCount: null, sistersCount: null, siblingPosition: null,
+        bodyType: null, complexion: null, eyesColor: null, hairColor: null, disability: null, eyeWear: null,
+        religion: 'Not provided', sectMazhab: null, religiousness: null, prayFrequency: null, halalDiet: null,
+        smoke: null, drink: null, wearsHijabOrBeard: null, motherTongue: 'Not provided',
+        countryLivingIn: rawData.country.trim(), stateProvince: rawData.stateProvince.trim(), city: rawData.city.trim(),
+        zipCode: '', educationLevel: 'Not provided', profession: '', nationality: 'Not provided', residingStatus: 'OTHERS',
+        guardianName: '', guardianRelation: '', guardianPhone: '', guardianPhoneCountryCode: null,
+        aboutMe: '', whatIAmLookingFor: '', photoPrivacy: 'HIDDEN',
+        completionPercentage: 10, isApproved: false, kycStatus: 'NOT_SUBMITTED',
+      }).returning();
+      if (!newProfile) throw new Error('The member profile could not be created.');
+      const [freePackage] = await tx.select().from(packages)
+        .where(and(eq(packages.isActive, true), sql`${packages.priceUsd} = 0`)).orderBy(packages.id).limit(1);
+      if (!freePackage) throw new Error('The free membership package is unavailable.');
       const expiresAt = new Date();
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
-
-      await db.insert(userSubscriptions).values({
+      expiresAt.setMonth(expiresAt.getMonth() + freePackage.durationMonths);
+      await tx.insert(userSubscriptions).values({
         userId: newUser.id,
-        packageId: 1,
+        packageId: freePackage.id,
         status: 'ACTIVE',
         pricePaidUsd: '0.00',
-        contactCreditsRemaining: assignedRole === 'SUPER_ADMIN' ? 9999 : 0,
+        contactCreditsRemaining: freePackage.contactCredits,
         expiresAt,
       });
-    }
+      return { newUser, newProfile, freePackage };
+    });
 
     // 7. Establish Secure Session
     await setSessionCookie({
@@ -296,17 +263,13 @@ export async function signUpAction(prevState: any, formData: FormData) {
       email: newUser.email,
       fullName: newProfile.fullName,
       role: assignedRole,
-      tier: assignedRole === 'SUPER_ADMIN' ? 'ELITE' : 'FREE',
+      tier: 'FREE',
       profileId: newProfile.profileId,
-      contactCredits: assignedRole === 'SUPER_ADMIN' ? 9999 : 0,
-      dailyViewLimit: assignedRole === 'SUPER_ADMIN' ? 9999 : 15,
+      contactCredits: freePackage.contactCredits,
+      dailyViewLimit: freePackage.dailyProfileViewLimit,
     });
 
     // 8. Redirect to appropriate destination
-    if (assignedRole === 'SUPER_ADMIN') {
-      redirect('/admin?welcome=admin');
-    }
-
     redirect('/dashboard?registered=true');
   } catch (error: any) {
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {

@@ -22,13 +22,13 @@ export function Footer() {
         }}
       >
         <div className="footer-links-grid">
-          {/* Column 1: Marriage Media USA Official Brand Info */}
+          {/* Column 1: MuslimBibah Official Brand Info */}
           <div className="footer-brand-column">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <div className="brand-logo-badge">
                 <img
                   src="/logo.png"
-                  alt="Marriage Media USA"
+                  alt="MuslimBibah"
                   style={{ height: 32, width: 'auto' }}
                 />
               </div>
@@ -42,16 +42,16 @@ export function Footer() {
               </div>
             </div>
             <p style={{ fontSize: '0.825rem', lineHeight: 1.6, color: '#94a3b8', marginBottom: 12 }}>
-              Welcome to <strong>MarriageMediaUSA.com</strong>, one of the leading and most trusted matrimony sites in the
+              Welcome to <strong>MuslimBibah.com</strong>, one of the leading and most trusted matrimony sites in the
               world. Specializing in 100% Halal matchmaking, 10-Level Profile Verification, and verified Wali family
               introductions across Bangladesh, USA, UK, Canada, Europe, and the Middle East.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: '0.78rem', color: '#cbd5e1' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Mail size={14} style={{ color: '#34d399' }} /> info@marriagemediausa.com
+                <Mail size={14} style={{ color: '#34d399' }} /> info@muslimbibah.com
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Globe size={14} style={{ color: '#38bdf8' }} /> marriagemediausa.com
+                <Globe size={14} style={{ color: '#38bdf8' }} /> muslimbibah.com
               </span>
             </div>
           </div>
@@ -123,7 +123,7 @@ export function Footer() {
             </h4>
             <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 7, fontSize: '0.78rem' }}>
               <li><Link href="/search" style={{ color: '#cbd5e1' }}>🔍 Advanced Search</Link></li>
-              <li><Link href="/why-us" style={{ color: '#cbd5e1' }}>🌟 Why Marriage Media USA</Link></li>
+              <li><Link href="/why-us" style={{ color: '#cbd5e1' }}>🌟 Why MuslimBibah</Link></li>
               <li><Link href="/#safety-faq" style={{ color: '#cbd5e1' }}>❓ Matrimony FAQs</Link></li>
               <li><Link href="/stories#testimonials" style={{ color: '#cbd5e1' }}>🗣️ Testimonials</Link></li>
               <li><Link href="/why-us#verify-profile" style={{ color: '#34d399', fontWeight: 700 }}>✅ 10-Level Verification</Link></li>
@@ -146,7 +146,7 @@ export function Footer() {
           }}
         >
           <div>
-            Copyright © 2026 <strong>MarriageMediaUSA.com</strong> (BD World Group Inc). All Rights Reserved.
+            Copyright © 2026 <strong>MuslimBibah.com</strong> (BD World Group Inc). All Rights Reserved.
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#34d399', fontWeight: 700 }}>

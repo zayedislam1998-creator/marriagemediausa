@@ -1,6 +1,6 @@
 'use server';
 
-import { getCurrentSession } from '@/lib/auth/session';
+import { getVerifiedSession } from '@/lib/auth/verifiedSession';
 import {
   createPackageInDb,
   updatePackageInDb,
@@ -17,8 +17,8 @@ import { revalidatePath } from 'next/cache';
  */
 export async function adminCreatePackageAction(prevState: any, formData: FormData) {
   try {
-    const session = await getCurrentSession();
-    if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN' as any)) {
+    const session = await getVerifiedSession();
+    if (!session || session.role !== 'SUPER_ADMIN') {
       return { success: false, error: 'Unauthorized: Only Super Admin can create pricing packages.' };
     }
 
@@ -61,6 +61,7 @@ export async function adminCreatePackageAction(prevState: any, formData: FormDat
     revalidatePath('/admin');
     revalidatePath('/membership-plan');
     revalidatePath('/');
+    revalidatePath('/dashboard');
 
     return {
       success: true,
@@ -78,8 +79,8 @@ export async function adminCreatePackageAction(prevState: any, formData: FormDat
  */
 export async function adminUpdatePackageAction(id: number, formData: FormData) {
   try {
-    const session = await getCurrentSession();
-    if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN' as any)) {
+    const session = await getVerifiedSession();
+    if (!session || session.role !== 'SUPER_ADMIN') {
       return { success: false, error: 'Unauthorized: Only Super Admin can modify pricing packages.' };
     }
 
@@ -116,6 +117,7 @@ export async function adminUpdatePackageAction(id: number, formData: FormData) {
     revalidatePath('/admin');
     revalidatePath('/membership-plan');
     revalidatePath('/');
+    revalidatePath('/dashboard');
 
     return {
       success: true,
@@ -133,8 +135,8 @@ export async function adminUpdatePackageAction(id: number, formData: FormData) {
  */
 export async function adminTogglePackageAction(id: number, isActive: boolean) {
   try {
-    const session = await getCurrentSession();
-    if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN' as any)) {
+    const session = await getVerifiedSession();
+    if (!session || session.role !== 'SUPER_ADMIN') {
       return { success: false, error: 'Unauthorized.' };
     }
 
@@ -150,6 +152,7 @@ export async function adminTogglePackageAction(id: number, isActive: boolean) {
     revalidatePath('/admin');
     revalidatePath('/membership-plan');
     revalidatePath('/');
+    revalidatePath('/dashboard');
 
     return { success: true, package: updated };
   } catch (error: any) {
@@ -162,8 +165,8 @@ export async function adminTogglePackageAction(id: number, isActive: boolean) {
  */
 export async function adminDeletePackageAction(id: number) {
   try {
-    const session = await getCurrentSession();
-    if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN' as any)) {
+    const session = await getVerifiedSession();
+    if (!session || session.role !== 'SUPER_ADMIN') {
       return { success: false, error: 'Unauthorized.' };
     }
 
@@ -179,6 +182,7 @@ export async function adminDeletePackageAction(id: number) {
     revalidatePath('/admin');
     revalidatePath('/membership-plan');
     revalidatePath('/');
+    revalidatePath('/dashboard');
 
     return { success: true, message: `Package #${id} removed.` };
   } catch (error: any) {
@@ -191,23 +195,23 @@ export async function adminDeletePackageAction(id: number) {
  */
 export async function adminAssignMemberTierAction(
   userId: string,
-  tier: 'FREE' | 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'ELITE'
+  packageId: number
 ) {
   try {
-    const session = await getCurrentSession();
-    if (!session || (session.role !== 'SUPER_ADMIN' && (session.role as any) !== 'ADMIN')) {
+    const session = await getVerifiedSession();
+    if (!session || session.role !== 'SUPER_ADMIN') {
       return { success: false, error: 'Unauthorized: Only Administrator can assign membership tiers.' };
     }
 
-    const res = await assignUserSubscriptionTierInDb(userId, tier);
-    if (!res.success) {
+    const res = await assignUserSubscriptionTierInDb(userId, packageId);
+    if ('error' in res) {
       return { success: false, error: res.error || 'Failed to update subscription in database.' };
     }
 
     AdminStore.addAuditLog(
       'Tier Mode Granted',
       session.email,
-      `Assigned ${tier} tier mode to member ${userId} (${res.packageName})`,
+      `Granted package #${packageId} to member ${userId} (${res.packageName}) without recording payment`,
       'SUCCESS'
     );
 
@@ -216,7 +220,7 @@ export async function adminAssignMemberTierAction(
 
     return {
       success: true,
-      message: `Successfully granted ${tier} Mode to member!`,
+      message: `Successfully granted ${res.packageName} to member as an admin grant.`,
       packageName: res.packageName,
     };
   } catch (error: any) {

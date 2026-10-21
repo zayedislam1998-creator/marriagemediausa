@@ -67,7 +67,7 @@ export function StepsToNikkah() {
             <img src="/images/w-title-b.png" alt="Divider" />
           </div>
           <p style={{ color: '#475569', fontSize: '0.925rem', maxWidth: 680, margin: '0 auto' }}>
-            Searching for a life partner is one of the most important tasks of life. MarriageMediaUSA.com combines
+            Searching for a life partner is one of the most important tasks of life. MuslimBibah.com combines
             free registration, 10-Level verification, and family oversight for a worry-free marriage journey.
           </p>
         </div>
@@ -103,7 +103,7 @@ export function StepsToNikkah() {
                 {item.step}
               </div>
 
-              {/* 3D Soul Icon Circle from live marriagemediausa.com */}
+              {/* 3D Soul Icon Circle from live muslimbibah.com */}
               <div
                 style={{
                   width: 68,

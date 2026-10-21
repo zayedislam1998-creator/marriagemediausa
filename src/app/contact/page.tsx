@@ -1,22 +1,27 @@
-'use client';
-
-import { useState } from 'react';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Footer } from '@/components/layout/Footer';
 import { BottomNav } from '@/components/layout/BottomNav';
-import { Mail, Phone, MapPin, Send, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { ContactForm } from '@/components/contact/ContactForm';
+import { Mail, Phone, MapPin, Clock, ShieldCheck } from 'lucide-react';
+import { getCmsPageSectionFromDb } from '@/db/queries';
+import { connection } from 'next/server';
 
-export default function ContactPage() {
-  const [sent, setSent] = useState(false);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
+export const instant = false;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSent(true);
-  };
+export default async function ContactPage() {
+  await connection();
+  const section = await getCmsPageSectionFromDb('contact', 'support_info').catch(() => null);
+  const supportInfo = section?.contentJson as {
+    phone?: string;
+    email?: string;
+    officeAddress?: string;
+    officeHours?: string;
+  } | undefined;
+
+  const email = supportInfo?.email || 'info@muslimbibah.com';
+  const phone = supportInfo?.phone || '+1 (313) 466-4589';
+  const officeAddress = supportInfo?.officeAddress || 'Michigan, USA & Tri-State Desk';
+  const officeHours = supportInfo?.officeHours || 'Mon - Fri: 9:00 AM - 6:00 PM EST';
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-app)', display: 'flex', flexDirection: 'column' }}>
@@ -26,7 +31,7 @@ export default function ContactPage() {
       <section
         style={{
           backgroundImage:
-            'linear-gradient(135deg, rgba(6, 78, 59, 0.92) 0%, rgba(15, 23, 42, 0.9) 100%), url("https://marriagemediausa.com/design/admin_panel/slider_images/bride_b-620x330.jpg")',
+            'linear-gradient(135deg, rgba(6, 78, 59, 0.92) 0%, rgba(15, 23, 42, 0.9) 100%), url("https://muslimbibah.com/design/admin_panel/slider_images/bride_b-620x330.jpg")',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           paddingBlock: 'var(--space-3xl)',
@@ -47,7 +52,7 @@ export default function ContactPage() {
               textShadow: '0 4px 16px rgba(0,0,0,0.4)',
             }}
           >
-            Contact MarriageMediaUSA.com
+            Contact MuslimBibah.com
           </h1>
           <p style={{ fontSize: '1.05rem', color: 'rgba(255,255,255,0.9)', lineHeight: 1.65, margin: 0 }}>
             Have questions about registration, 10-Level Profile Verification, or VIP Matchmaking? Get in touch with our team.
@@ -58,13 +63,13 @@ export default function ContactPage() {
       <section style={{ paddingBlock: 'var(--space-3xl)', flex: 1 }}>
         <div style={{ maxWidth: 'var(--max-content-width)', margin: '0 auto', paddingInline: 'var(--space-lg)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 'var(--space-xl)', alignItems: 'start' }}>
-            {/* Left Contact Info Cards (from https://marriagemediausa.com/contact) */}
+            {/* Left Contact Info Cards (Dynamically populated from PostgreSQL cms_page_sections) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
               <div className="card-3d" style={{ padding: 'var(--space-xl)', borderTop: '5px solid #059669' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
                   <img
-                    src="https://marriagemediausa.com/design/img/address-1.png"
-                    alt="Contact Marriage Media USA"
+                    src="https://muslimbibah.com/design/img/address-1.png"
+                    alt="Contact MuslimBibah"
                     style={{ width: 52, height: 52, objectFit: 'contain' }}
                   />
                   <div>
@@ -82,18 +87,30 @@ export default function ContactPage() {
                     <Mail size={18} color="#059669" />
                     <div>
                       <strong>General Inquiries:</strong>{' '}
-                      <a href="mailto:info@marriagemediausa.com" style={{ color: '#059669', fontWeight: 800 }}>
-                        info@marriagemediausa.com
+                      <a href={`mailto:${email}`} style={{ color: '#059669', fontWeight: 800 }}>
+                        {email}
                       </a>
                     </div>
                   </div>
+
+                  {phone && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Phone size={18} color="#D97706" />
+                      <div>
+                        <strong>Concierge Phone / WhatsApp:</strong>{' '}
+                        <a href={`tel:${phone}`} style={{ color: '#D97706', fontWeight: 800 }}>
+                          {phone}
+                        </a>
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <ShieldCheck size={18} color="#c0392b" />
                     <div>
                       <strong>10-Level Document Verification:</strong>{' '}
-                      <a href="mailto:support@marriagemediausa.com" style={{ color: '#c0392b', fontWeight: 800 }}>
-                        support@marriagemediausa.com
+                      <a href="mailto:support@muslimbibah.com" style={{ color: '#c0392b', fontWeight: 800 }}>
+                        support@muslimbibah.com
                       </a>
                     </div>
                   </div>
@@ -101,7 +118,14 @@ export default function ContactPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <MapPin size={18} color="#0284C7" />
                     <div>
-                      <strong>US Regional Representative:</strong> Michigan, USA & Tri-State Desk
+                      <strong>Official Office / Regional Desk:</strong> {officeAddress}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Clock size={18} color="#6366F1" />
+                    <div>
+                      <strong>Office Hours:</strong> {officeHours}
                     </div>
                   </div>
                 </div>
@@ -112,7 +136,7 @@ export default function ContactPage() {
                   How to Verify Your Profile by Email
                 </h3>
                 <p style={{ fontSize: '0.84rem', color: 'var(--text-body)', lineHeight: 1.65, margin: 0 }}>
-                  To receive the <strong>Verified Profile Badge</strong>, please send clear scanned copies of your National ID / Passport, Educational Certificates, and Employment ID to <strong>support@marriagemediausa.com</strong> along with your 10-digit Marriage Media USA Profile ID.
+                  To receive the <strong>Verified Profile Badge</strong>, please send clear scanned copies of your National ID / Passport, Educational Certificates, and Employment ID to <strong>support@muslimbibah.com</strong> along with your 10-digit MuslimBibah Profile ID.
                 </p>
               </div>
             </div>
@@ -126,105 +150,7 @@ export default function ContactPage() {
                 Fill out the form below and our customer support specialists will respond promptly.
               </p>
 
-              {sent ? (
-                <div style={{ textAlign: 'center', padding: 'var(--space-xl) 0' }}>
-                  <CheckCircle2 size={48} color="#059669" style={{ margin: '0 auto 12px' }} />
-                  <h3 style={{ fontSize: '1.3rem', fontWeight: 900, margin: '0 0 8px' }}>
-                    JazakAllahu Khayran, {name}!
-                  </h3>
-                  <p style={{ fontSize: '0.875rem', color: 'var(--text-body)', marginBottom: 18 }}>
-                    Your message has been received by our support desk (info@marriagemediausa.com). We will contact you shortly.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setSent(false)}
-                    className="btn-3d-emerald"
-                    style={{ padding: '10px 20px', borderRadius: 999, fontWeight: 800, cursor: 'pointer' }}
-                  >
-                    Send Another Message
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div>
-                    <label style={{ fontSize: '0.8125rem', fontWeight: 800, display: 'block', marginBottom: 6 }}>
-                      Your Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Enter your full name"
-                      className="input-3d"
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '0.8125rem', fontWeight: 800, display: 'block', marginBottom: 6 }}>
-                      Phone / WhatsApp Number *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+1 or +880 phone number"
-                      className="input-3d"
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '0.8125rem', fontWeight: 800, display: 'block', marginBottom: 6 }}>
-                      Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      className="input-3d"
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '0.8125rem', fontWeight: 800, display: 'block', marginBottom: 6 }}>
-                      Message *
-                    </label>
-                    <textarea
-                      rows={4}
-                      required
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      placeholder="Write your question or inquiry here..."
-                      className="input-3d"
-                      style={{ width: '100%', resize: 'vertical' }}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="btn-3d-crimson"
-                    style={{
-                      padding: '13px 24px',
-                      borderRadius: 12,
-                      fontWeight: 900,
-                      fontSize: '0.95rem',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <Send size={16} /> Send Message
-                  </button>
-                </form>
-              )}
+              <ContactForm />
             </div>
           </div>
         </div>

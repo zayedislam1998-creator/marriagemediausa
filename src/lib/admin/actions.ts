@@ -1,10 +1,23 @@
 'use server';
 
-import { getCurrentSession } from '@/lib/auth/session';
+import { getVerifiedSession } from '@/lib/auth/verifiedSession';
 import { AdminStore } from './store';
 import { db } from '@/db';
 import { users } from '@/db/schema';
-import { getAllMembersForAdmin } from '@/db/queries';
+import {
+  getAllMembersForAdmin,
+  submitSuccessStoryInDb,
+  getAllCmsStoriesFromDb,
+  toggleCmsStoryPublishInDb,
+  deleteCmsStoryInDb,
+  saveCmsArticleInDb,
+  getCmsArticlesFromDb,
+  toggleCmsArticlePublishInDb,
+  deleteCmsArticleInDb,
+  saveCmsPageSectionInDb,
+  getCmsPageSectionFromDb,
+  getAllCmsPageSectionsFromDb,
+} from '@/db/queries';
 import { eq, or } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { UserRole } from '@/lib/auth/session';
@@ -13,7 +26,7 @@ import { revalidatePath } from 'next/cache';
 const ADMIN_ACCOUNT_ROLES = ['SUPER_ADMIN', 'EDITOR', 'MODERATOR'] as const;
 
 export async function getAdminMembersAction() {
-  const session = await getCurrentSession();
+  const session = await getVerifiedSession();
   if (!session || session.role !== 'SUPER_ADMIN') {
     return { success: false as const, error: 'Super Admin access is required.', members: [] };
   }
@@ -23,7 +36,7 @@ export async function getAdminMembersAction() {
 }
 
 export async function createAdminAccountAction(formData: FormData) {
-  const session = await getCurrentSession();
+  const session = await getVerifiedSession();
   if (!session || session.role !== 'SUPER_ADMIN') {
     return { success: false as const, error: 'Super Admin access is required.' };
   }
@@ -72,7 +85,7 @@ export async function createAdminAccountAction(formData: FormData) {
         passwordHash,
         role,
         isActive: true,
-        isVerified: true,
+        isVerified: false,
       })
       .returning({ id: users.id, email: users.email, phoneNumber: users.phoneNumber, role: users.role });
 
@@ -85,7 +98,7 @@ export async function createAdminAccountAction(formData: FormData) {
 }
 
 export async function inviteSeatAction(prevState: any, formData: FormData) {
-  const session = await getCurrentSession();
+  const session = await getVerifiedSession();
   if (!session || session.role !== 'SUPER_ADMIN') {
     return { success: false, error: 'Unauthorized: Super Admin permissions required.' };
   }
@@ -107,7 +120,7 @@ export async function inviteSeatAction(prevState: any, formData: FormData) {
 }
 
 export async function toggleSeatStatusAction(seatId: string) {
-  const session = await getCurrentSession();
+  const session = await getVerifiedSession();
   if (!session || session.role !== 'SUPER_ADMIN') {
     return { success: false, error: 'Unauthorized: Super Admin permissions required.' };
   }
@@ -125,7 +138,7 @@ export async function updateKycStatusAction(
   status: 'VERIFIED' | 'REJECTED',
   notes?: string
 ) {
-  const session = await getCurrentSession();
+  const session = await getVerifiedSession();
   if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'MODERATOR')) {
     return { success: false, error: 'Unauthorized: Moderator permissions required.' };
   }
@@ -142,7 +155,7 @@ export async function updateFraudStatusAction(
   ticketId: string,
   status: 'OPEN' | 'WARNED' | 'SUSPENDED' | 'BANNED'
 ) {
-  const session = await getCurrentSession();
+  const session = await getVerifiedSession();
   if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'MODERATOR')) {
     return { success: false, error: 'Unauthorized: Moderator permissions required.' };
   }
@@ -156,56 +169,188 @@ export async function updateFraudStatusAction(
 }
 
 export async function createCmsStoryAction(prevState: any, formData: FormData) {
-  const session = await getCurrentSession();
+  const session = await getVerifiedSession();
   if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'EDITOR')) {
     return { success: false, error: 'Unauthorized: Editor permissions required.' };
   }
 
-  const title = formData.get('title') as string;
-  const couple = formData.get('couple') as string;
-  const date = formData.get('date') as string;
-  const location = formData.get('location') as string;
-  const excerpt = formData.get('excerpt') as string;
-  const photoUrl = (formData.get('photoUrl') as string) || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80';
+  const title = (formData.get('title') as string)?.trim();
+  const couple = (formData.get('couple') as string)?.trim();
+  const date = (formData.get('date') as string)?.trim();
+  const location = (formData.get('location') as string)?.trim();
+  const excerpt = (formData.get('excerpt') as string)?.trim();
+  const photoUrl = (formData.get('photoUrl') as string)?.trim() || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80';
 
-  if (!title || !couple || !date || !excerpt) {
-    return { success: false, error: 'Please fill in all story fields.' };
+  if (!title || !couple || !excerpt) {
+    return { success: false, error: 'Story title, couple names, and testimonial body are required.' };
   }
 
-  const story = AdminStore.addStory({
+  const combinedStoryBody = location ? `${excerpt}\n\nLocation: ${location}` : excerpt;
+
+  const res = await submitSuccessStoryInDb({
     title,
-    couple,
-    date,
-    location: location || 'United States',
-    excerpt,
-    photoUrl,
-    status: 'PUBLISHED',
+    coupleNames: couple,
+    weddingDate: date || undefined,
+    imageUrl: photoUrl,
+    storyBody: combinedStoryBody,
+    isPublished: true,
   });
 
-  return { success: true, story };
+  if (!res.success || !res.story) {
+    return { success: false, error: res.error || 'Failed to save couple story in PostgreSQL.' };
+  }
+
+  revalidatePath('/admin/cms');
+  revalidatePath('/stories');
+  revalidatePath('/');
+
+  return { success: true, story: res.story };
+}
+
+export async function toggleCmsStoryPublishAction(id: number, isPublished: boolean) {
+  const session = await getVerifiedSession();
+  if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'EDITOR')) {
+    return { success: false, error: 'Unauthorized: Editor permissions required.' };
+  }
+
+  const res = await toggleCmsStoryPublishInDb(id, isPublished);
+  if (!res.success) {
+    return { success: false, error: res.error || 'Failed to update story status.' };
+  }
+
+  revalidatePath('/admin/cms');
+  revalidatePath('/stories');
+  revalidatePath('/');
+
+  return { success: true, story: res.story };
+}
+
+export async function deleteCmsStoryAction(id: number) {
+  const session = await getVerifiedSession();
+  if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'EDITOR')) {
+    return { success: false, error: 'Unauthorized: Editor permissions required.' };
+  }
+
+  const res = await deleteCmsStoryInDb(id);
+  if (!res.success) {
+    return { success: false, error: res.error || 'Failed to delete story.' };
+  }
+
+  revalidatePath('/admin/cms');
+  revalidatePath('/stories');
+  revalidatePath('/');
+
+  return { success: true };
 }
 
 export async function createCmsArticleAction(prevState: any, formData: FormData) {
-  const session = await getCurrentSession();
+  const session = await getVerifiedSession();
   if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'EDITOR')) {
     return { success: false, error: 'Unauthorized: Editor permissions required.' };
   }
 
-  const title = formData.get('title') as string;
-  const category = (formData.get('category') as string) || 'Islamic Guidance';
-  const author = (formData.get('author') as string) || 'Marriage Media USA Editorial Desk';
+  const title = (formData.get('title') as string)?.trim();
+  const category = ((formData.get('category') as string) || 'Sunnah Ethics').trim();
+  const author = ((formData.get('author') as string) || 'MuslimBibah Editorial Desk').trim();
+  const excerpt = ((formData.get('excerpt') as string) || title).trim();
+  const content = ((formData.get('content') as string) || excerpt).trim();
 
   if (!title) {
     return { success: false, error: 'Article title is required.' };
   }
 
-  const article = AdminStore.addArticle({
+  const slug = title
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .slice(0, 100) + '-' + Date.now().toString().slice(-4);
+
+  const res = await saveCmsArticleInDb({
     title,
+    slug,
     category,
     author,
-    publishedDate: new Date().toISOString().split('T')[0],
-    status: 'PUBLISHED',
+    excerpt,
+    content,
+    isPublished: true,
   });
 
-  return { success: true, article };
+  if (!res.success || !res.article) {
+    return { success: false, error: res.error || 'Failed to save CMS article in PostgreSQL.' };
+  }
+
+  revalidatePath('/admin/cms');
+  revalidatePath('/');
+
+  return { success: true, article: res.article };
 }
+
+export async function toggleCmsArticlePublishAction(id: number, isPublished: boolean) {
+  const session = await getVerifiedSession();
+  if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'EDITOR')) {
+    return { success: false, error: 'Unauthorized: Editor permissions required.' };
+  }
+
+  const res = await toggleCmsArticlePublishInDb(id, isPublished);
+  if (!res.success) {
+    return { success: false, error: res.error || 'Failed to update article status.' };
+  }
+
+  revalidatePath('/admin/cms');
+  revalidatePath('/');
+
+  return { success: true, article: res.article };
+}
+
+export async function deleteCmsArticleAction(id: number) {
+  const session = await getVerifiedSession();
+  if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'EDITOR')) {
+    return { success: false, error: 'Unauthorized: Editor permissions required.' };
+  }
+
+  const res = await deleteCmsArticleInDb(id);
+  if (!res.success) {
+    return { success: false, error: res.error || 'Failed to delete article.' };
+  }
+
+  revalidatePath('/admin/cms');
+  revalidatePath('/');
+
+  return { success: true };
+}
+
+export async function saveCmsPageSectionAction(data: {
+  pageKey: string;
+  sectionKey: string;
+  title?: string;
+  contentJson: any;
+  isPublished?: boolean;
+}) {
+  const session = await getVerifiedSession();
+  if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'EDITOR')) {
+    return { success: false, error: 'Unauthorized: Editor permissions required.' };
+  }
+
+  const res = await saveCmsPageSectionInDb({
+    pageKey: data.pageKey,
+    sectionKey: data.sectionKey,
+    title: data.title,
+    contentJson: data.contentJson,
+    isPublished: data.isPublished,
+    userId: session.userId,
+  });
+
+  if (!res.success) {
+    return { success: false, error: res.error || 'Failed to save page section.' };
+  }
+
+  revalidatePath('/admin/cms');
+  revalidatePath('/');
+  revalidatePath('/how-it-works');
+  revalidatePath('/why-us');
+  revalidatePath('/services');
+  revalidatePath('/contact');
+
+  return { success: true, section: res.section };
+}
+

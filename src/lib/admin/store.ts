@@ -69,7 +69,7 @@ class AdminStoreService {
     {
       id: 'SEAT-001',
       name: 'Chief Super Admin',
-      email: 'admin@marriagemediausa.com',
+      email: 'admin@muslimbibah.com',
       role: 'SUPER_ADMIN',
       scope: 'Global Executive & Financial Engine (/admin/*)',
       status: 'Active',
@@ -78,7 +78,7 @@ class AdminStoreService {
     {
       id: 'SEAT-002',
       name: 'Content Manager',
-      email: 'editor@marriagemediausa.com',
+      email: 'editor@muslimbibah.com',
       role: 'EDITOR',
       scope: 'CMS Studio, Success Stories & FAQ Guides (/admin/cms/*)',
       status: 'Active',
@@ -87,7 +87,7 @@ class AdminStoreService {
     {
       id: 'SEAT-003',
       name: 'Trust & Safety Lead',
-      email: 'moderator@marriagemediausa.com',
+      email: 'moderator@muslimbibah.com',
       role: 'MODERATOR',
       scope: 'KYC Vault, Photo Modesty & Fraud Queue (/admin/kyc/*)',
       status: 'Active',
@@ -145,7 +145,7 @@ class AdminStoreService {
       id: 'FRD-102',
       reportedProfileId: '2026044925',
       reportedName: 'Dr. Ayesha Siddiqa',
-      reporterEmail: 'inquiry@marriagemediausa.com',
+      reporterEmail: 'inquiry@muslimbibah.com',
       reason: 'Routine verification: requested phone validation for Texas clinic.',
       status: 'WARNED',
       createdAt: '2026-10-08',
@@ -168,7 +168,7 @@ class AdminStoreService {
       couple: 'Dr. Tariq & Fatima',
       date: 'August 2025',
       location: 'Dallas, TX',
-      excerpt: 'Both sets of parents met via Marriage Media USA after Wali verification. Alhamdulillah, solemnized within 6 months.',
+      excerpt: 'Both sets of parents met via MuslimBibah after Wali verification. Alhamdulillah, solemnized within 6 months.',
       photoUrl: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
       status: 'PUBLISHED',
     },
@@ -229,7 +229,7 @@ class AdminStoreService {
       id: 'LOG-901',
       timestamp: '2026-10-11 10:14:22',
       action: 'KYC Document Verified',
-      performedBy: 'moderator@marriagemediausa.com',
+      performedBy: 'moderator@muslimbibah.com',
       ipAddress: '74.125.21.18',
       details: 'Approved Texas Medical License for Dr. Ayesha Siddiqa (Badge issued)',
       severity: 'SUCCESS',
@@ -247,7 +247,7 @@ class AdminStoreService {
       id: 'LOG-899',
       timestamp: '2026-10-10 22:15:00',
       action: 'Super Admin Seat Inspection',
-      performedBy: 'admin@marriagemediausa.com',
+      performedBy: 'admin@muslimbibah.com',
       ipAddress: '108.45.192.5',
       details: 'Logged into Super Admin Revenue Command Center',
       severity: 'INFO',
@@ -256,7 +256,7 @@ class AdminStoreService {
       id: 'LOG-898',
       timestamp: '2026-10-10 18:03:45',
       action: 'Purdah Blur Enforced',
-      performedBy: 'moderator@marriagemediausa.com',
+      performedBy: 'moderator@muslimbibah.com',
       ipAddress: '74.125.21.18',
       details: 'Enforced 24px Purdah Gaussian modesty shield on newly uploaded avatar',
       severity: 'WARNING',
@@ -284,7 +284,7 @@ class AdminStoreService {
       assignedDate: new Date().toISOString().split('T')[0],
     };
     this.seats.push(newSeat);
-    this.addAuditLog('Seat Invitation Created', 'admin@marriagemediausa.com', `Created ${role} seat for ${email}`);
+    this.addAuditLog('Seat Invitation Created', 'admin@muslimbibah.com', `Created ${role} seat for ${email}`);
     return newSeat;
   }
 
@@ -292,7 +292,7 @@ class AdminStoreService {
     const seat = this.seats.find((s) => s.id === seatId);
     if (!seat) return null;
     seat.status = seat.status === 'Active' ? 'Suspended' : 'Active';
-    this.addAuditLog('Seat Status Updated', 'admin@marriagemediausa.com', `${seat.email} set to ${seat.status}`);
+    this.addAuditLog('Seat Status Updated', 'admin@muslimbibah.com', `${seat.email} set to ${seat.status}`);
     return seat;
   }
 
@@ -309,7 +309,7 @@ class AdminStoreService {
     if (status === 'VERIFIED') sub.verifiedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
     this.addAuditLog(
       status === 'VERIFIED' ? 'KYC Document Approved' : 'KYC Document Rejected',
-      'moderator@marriagemediausa.com',
+      'moderator@muslimbibah.com',
       `${sub.candidateName} (${sub.id}) marked as ${status}`
     );
     return sub;
@@ -324,7 +324,7 @@ class AdminStoreService {
     const ticket = this.fraudTickets.find((t) => t.id === ticketId);
     if (!ticket) return null;
     ticket.status = status;
-    this.addAuditLog('Fraud Ticket Action', 'moderator@marriagemediausa.com', `${ticket.id} (${ticket.reportedName}) status changed to ${status}`);
+    this.addAuditLog('Fraud Ticket Action', 'moderator@muslimbibah.com', `${ticket.id} (${ticket.reportedName}) status changed to ${status}`);
     return ticket;
   }
 
@@ -339,7 +339,7 @@ class AdminStoreService {
       id: `STRY-0${this.stories.length + 1}`,
     };
     this.stories.unshift(newStory);
-    this.addAuditLog('CMS Story Published', 'editor@marriagemediausa.com', `Published story: "${newStory.title}"`);
+    this.addAuditLog('CMS Story Published', 'editor@muslimbibah.com', `Published story: "${newStory.title}"`);
     return newStory;
   }
 
@@ -354,7 +354,7 @@ class AdminStoreService {
       reads: 1,
     };
     this.articles.unshift(newArticle);
-    this.addAuditLog('CMS Article Published', 'editor@marriagemediausa.com', `Published guide: "${newArticle.title}"`);
+    this.addAuditLog('CMS Article Published', 'editor@muslimbibah.com', `Published guide: "${newArticle.title}"`);
     return newArticle;
   }
 

@@ -67,25 +67,39 @@ export function MemberExecutiveLayout({
   const [livePackages, setLivePackages] = useState<any[]>(initialPackages);
   const [balance, setBalance] = useState<number>(initialCreditBalance);
   const [currentTier, setCurrentTier] = useState<string>(session.tier);
+  const [dailyViewLimit, setDailyViewLimit] = useState<number>(session.dailyViewLimit);
 
   // Payment Modal State
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [activePaymentItem, setActivePaymentItem] = useState<PaymentItem | null>(null);
 
   const fetchLivePackages = () => {
-    fetch('/api/packages')
+    fetch('/api/packages', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
-        if (data.success && Array.isArray(data.packages) && data.packages.length > 0) {
+        if (data.success && Array.isArray(data.packages)) {
           setLivePackages(data.packages);
         }
       })
       .catch((e) => console.error('Error fetching live packages for member:', e));
   };
 
+  const refreshMembership = () => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!data?.authenticated || !data.user) return;
+        setCurrentTier(data.user.tier || 'FREE');
+        setBalance(Number(data.user.contactCredits) || 0);
+        setDailyViewLimit(Number(data.user.dailyViewLimit) || 15);
+      })
+      .catch((error) => console.error('Membership refresh failed:', error));
+  };
+
   // Fetch live packages from PostgreSQL on mount
   React.useEffect(() => {
     fetchLivePackages();
+    refreshMembership();
   }, []);
 
   // Cross-Tab Reactivity Listener: instantly update if data updated in another tab!
@@ -93,6 +107,7 @@ export function MemberExecutiveLayout({
     if (msg.type === 'PACKAGE_UPDATED') {
       fetchLivePackages();
     }
+    if (msg.type === 'MEMBERSHIP_UPDATED' || msg.type === 'MEMBER_PROVISIONED') refreshMembership();
     setSyncToast(`✓ Real-time update detected: ${msg.type.replace(/_/g, ' ')}`);
     setTimeout(() => setSyncToast(null), 3500);
   });
@@ -207,7 +222,7 @@ export function MemberExecutiveLayout({
               </div>
               <div>
                 <div style={{ fontSize: '1rem', fontWeight: 800, color: '#F8FAFC', letterSpacing: '-0.3px' }}>
-                  Marriage Media USA
+                  MuslimBibah
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 600 }}>
                   Member Portal
@@ -359,7 +374,7 @@ export function MemberExecutiveLayout({
                     {session.fullName}
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#94A3B8', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                    {session.tier} Member
+                    {currentTier} Member
                   </div>
                 </div>
               </div>
@@ -462,7 +477,7 @@ export function MemberExecutiveLayout({
           >
             <Menu size={24} />
           </button>
-          <span style={{ fontWeight: 800 }}>Marriage Media USA Portal</span>
+          <span style={{ fontWeight: 800 }}>MuslimBibah Portal</span>
         </div>
         <button
           type="button"
@@ -575,7 +590,7 @@ export function MemberExecutiveLayout({
                     {session.fullName}
                   </div>
                   <div style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 700 }}>
-                    {session.tier} Member
+                    {currentTier} Member
                   </div>
                 </div>
                 <ChevronDown size={14} color="#64748B" />
@@ -678,7 +693,7 @@ export function MemberExecutiveLayout({
             tier={currentTier}
             fullName={session.fullName}
             creditBalance={balance}
-            dailyViewLimit={session.dailyViewLimit}
+            dailyViewLimit={dailyViewLimit}
             curatedMatches={curatedMatches}
             myProfile={myProfile}
             userEmail={session.email}

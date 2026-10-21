@@ -320,7 +320,7 @@ export function ProposalManager({ initialProposals, currentUserId }: ProposalMan
               Decline Proposal Respectfully
             </h3>
             <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-              Choose or edit a polite canned Islamic note. Dignity and kindness are mandatory on Marriage Media USA.
+              Choose or edit a polite canned Islamic note. Dignity and kindness are mandatory on MuslimBibah.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>

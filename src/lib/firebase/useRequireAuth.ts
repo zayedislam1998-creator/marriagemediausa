@@ -15,6 +15,7 @@ export function useRequireAuth(options?: UseRequireAuthOptions) {
   const [user, setUser] = useState<FirestoreUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUnauthorizedRole, setIsUnauthorizedRole] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const hasRedirectedRef = useRef<boolean>(false);
   const authResolvedRef = useRef<boolean>(false);
 
@@ -34,28 +35,33 @@ export function useRequireAuth(options?: UseRequireAuthOptions) {
       try {
         // 1. Authoritative check: PostgreSQL HTTP-Only session (/api/auth/me)
         const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (res.status >= 500) {
+          if (!isCancelled) {
+            authResolvedRef.current = true;
+            setAuthError('We could not verify your session right now. Please retry in a moment.');
+            setIsLoading(false);
+          }
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           if (data.authenticated && data.user) {
             if (!isCancelled) {
               authResolvedRef.current = true;
+              setAuthError(null);
               const mappedUser: FirestoreUser = {
                 uid: data.user.userId,
                 email: data.user.email,
                 fullName: data.user.fullName || 'Distinguished Member',
                 role: data.user.role || 'MEMBER',
-                membershipTier: data.user.tier || 'GOLD',
+                membershipTier: data.user.tier || 'FREE',
                 status: 'ACTIVE',
                 profileId: data.user.profileId || `MMU_${data.user.userId.slice(-6)}`,
+                dailyViewLimit: Number(data.user.dailyViewLimit) || 15,
+                contactCredits: Number(data.user.contactCredits) || 0,
               };
 
-              const isAdminUser =
-                mappedUser.role === 'SUPER_ADMIN' ||
-                mappedUser.role === 'ADMIN' ||
-                (mappedUser.email && (
-                  mappedUser.email.toLowerCase() === 'skyxamerica24@gmail.com' ||
-                  mappedUser.email.toLowerCase().includes('admin')
-                ));
+              const isAdminUser = mappedUser.role === 'SUPER_ADMIN';
 
               if (options?.requireRole === 'ADMIN' && !isAdminUser) {
                 setUser(mappedUser);
@@ -73,11 +79,18 @@ export function useRequireAuth(options?: UseRequireAuthOptions) {
         }
       } catch (err) {
         console.warn('[Auth] Session check warning:', err);
+        if (!isCancelled) {
+          authResolvedRef.current = true;
+          setAuthError('We could not connect to verify your session. Please retry in a moment.');
+          setIsLoading(false);
+        }
+        return;
       }
 
       // If not authenticated via server session
       if (!isCancelled) {
         authResolvedRef.current = true;
+        setAuthError(null);
         setUser(null);
         setIsLoading(false);
 
@@ -98,14 +111,7 @@ export function useRequireAuth(options?: UseRequireAuthOptions) {
     };
   }, [router, pathname, options?.requireRole]);
 
-  const isAdmin = user
-    ? user.role === 'SUPER_ADMIN' ||
-      user.role === 'ADMIN' ||
-      (user.email && (
-        user.email.toLowerCase() === 'skyxamerica24@gmail.com' ||
-        user.email.toLowerCase().includes('admin')
-      ))
-    : false;
+  const isAdmin = user?.role === 'SUPER_ADMIN';
 
   const handleLogout = async () => {
     await executeUniversalLogout('/login?logged_out=1');
@@ -115,6 +121,7 @@ export function useRequireAuth(options?: UseRequireAuthOptions) {
     user,
     isLoading,
     isUnauthorizedRole,
+    authError,
     isAdmin,
     logout: handleLogout,
   };

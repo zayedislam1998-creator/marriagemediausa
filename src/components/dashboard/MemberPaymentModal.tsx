@@ -136,16 +136,12 @@ export function MemberPaymentModal({
           throw new Error(data.error || 'Failed to initiate Stripe checkout');
         }
 
-        if (data.isSimulated || data.message) {
-          setSuccessMsg(data.message || 'Payment completed successfully in Sandbox mode!');
-          onSuccess(item.credits, item.badgeTitle || item.title);
-          setTimeout(() => {
-            onClose();
-            setSuccessMsg(null);
-          }, 2500);
-        } else if (data.url) {
+        if (data.url) {
           window.location.href = data.url;
+          return;
         }
+
+        throw new Error('No checkout URL received from Stripe gateway.');
       } else if (selectedGateway === 'PAYPAL') {
         // Step 1: Create Order
         const orderRes = await fetch('/api/payments/paypal/create-order', {
@@ -159,32 +155,16 @@ export function MemberPaymentModal({
           throw new Error(orderData.error || 'Failed to create PayPal order');
         }
 
-        // Step 2: Capture Order
-        const captureRes = await fetch('/api/payments/paypal/capture-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId: orderData.orderId,
-            userId,
-            packageId: item.packageId,
-            type: item.type,
-            credits: item.credits,
-            customAmount: item.price,
-            profileToken,
-          }),
-        });
+        const approveLink = orderData.links?.find(
+          (l: any) => l.rel === 'approve' || l.rel === 'payer-action'
+        )?.href;
 
-        const captureData = await captureRes.json();
-        if (!captureData.success) {
-          throw new Error(captureData.error || 'Failed to capture PayPal payment');
+        if (approveLink) {
+          window.location.href = approveLink;
+          return;
         }
 
-        setSuccessMsg('✓ PayPal payment completed & verified! Credits and package activated.');
-        onSuccess(item.credits, item.badgeTitle || item.title);
-        setTimeout(() => {
-          onClose();
-          setSuccessMsg(null);
-        }, 2500);
+        throw new Error('No approval redirect link received from PayPal gateway.');
       }
     } catch (err: any) {
       console.error('Payment error:', err);

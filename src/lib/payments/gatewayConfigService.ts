@@ -1,6 +1,7 @@
 import { db, paymentGatewaysConfig } from '@/db';
 import { eq } from 'drizzle-orm';
 import Stripe from 'stripe';
+import { decryptCredential, encryptCredential, hasCredential } from './credentialEncryption';
 
 export interface GatewayConfigRecord {
   gateway: 'STRIPE' | 'PAYPAL';
@@ -30,9 +31,9 @@ export class GatewayConfigService {
       if (!record) return null;
 
       // Prefer DB stored key, fallback to ENV if placeholder
-      let secretKey = record.encryptedSecretKey;
+      let secretKey = decryptCredential(record.encryptedSecretKey);
       let publicKey = record.publicKey;
-      let webhookSecret = record.encryptedWebhookSecret;
+      let webhookSecret = decryptCredential(record.encryptedWebhookSecret);
 
       if (gateway === 'STRIPE') {
         if ((!secretKey || secretKey.includes('placeholder')) && process.env.STRIPE_SECRET_KEY) {
@@ -84,17 +85,8 @@ export class GatewayConfigService {
         const publicKey = r.publicKey || '';
 
         const isPlaceholder = secretKey.includes('placeholder');
-        const maskedSecret = isPlaceholder
-          ? ''
-          : secretKey.length > 8
-          ? `${secretKey.slice(0, 7)}••••••••${secretKey.slice(-4)}`
-          : '••••••••';
-
-        const maskedWebhook = webhookSecret.includes('placeholder')
-          ? ''
-          : webhookSecret.length > 8
-          ? `${webhookSecret.slice(0, 6)}••••••••${webhookSecret.slice(-4)}`
-          : '••••••••';
+        const maskedSecret = isPlaceholder ? '' : secretKey ? '••••••••' : '';
+        const maskedWebhook = webhookSecret.includes('placeholder') ? '' : webhookSecret ? '••••••••' : '';
 
         return {
           id: r.id,
@@ -103,9 +95,9 @@ export class GatewayConfigService {
           isActive: r.isActive,
           publicKey: publicKey.includes('placeholder') ? '' : publicKey,
           secretKeyMasked: maskedSecret,
-          secretKeyRaw: isPlaceholder ? '' : secretKey,
+          hasSecretKey: hasCredential(secretKey) && !isPlaceholder,
           webhookSecretMasked: maskedWebhook,
-          webhookSecretRaw: webhookSecret.includes('placeholder') ? '' : webhookSecret,
+          hasWebhookSecret: hasCredential(webhookSecret) && !webhookSecret.includes('placeholder'),
           webhookId: r.webhookId || '',
           settingsJson: r.settingsJson,
           lastTestedAt: r.lastTestedAt,
@@ -143,10 +135,10 @@ export class GatewayConfigService {
       };
 
       if (data.secretKey) {
-        updateData.encryptedSecretKey = data.secretKey;
+        updateData.encryptedSecretKey = encryptCredential(data.secretKey);
       }
-      if (data.webhookSecret !== undefined) {
-        updateData.encryptedWebhookSecret = data.webhookSecret;
+      if (data.webhookSecret) {
+        updateData.encryptedWebhookSecret = encryptCredential(data.webhookSecret);
       }
       if (data.webhookId !== undefined) {
         updateData.webhookId = data.webhookId;
@@ -195,6 +187,13 @@ export class GatewayConfigService {
       }
 
       if (gateway === 'STRIPE') {
+        const expectedSecretPrefix = mode === 'LIVE' ? 'sk_live_' : 'sk_test_';
+        const expectedPublicPrefix = mode === 'LIVE' ? 'pk_live_' : 'pk_test_';
+        if (!secretKey.startsWith(expectedSecretPrefix) || !publicKey.startsWith(expectedPublicPrefix)) {
+          const errorMsg = `Configured Stripe key prefixes do not match ${mode} mode.`;
+          await this.recordTestResult(gateway, 'FAILED', errorMsg);
+          return { success: false, latencyMs: 0, message: errorMsg };
+        }
         // Authenticate directly with Stripe API
         const stripe = new Stripe(secretKey, {
           apiVersion: '2025-02-24.acacia' as any,

@@ -21,7 +21,6 @@ import {
 import { SeatMember, AuditLog } from '@/lib/admin/store';
 import { inviteSeatAction, toggleSeatStatusAction } from '@/lib/admin/actions';
 import { broadcastSyncEvent, useCrossTabSync } from '@/lib/sync/broadcastSync';
-import { seedFirestoreInitialData } from '@/lib/firebase/firestoreService';
 import { PaymentGatewaysTab } from './PaymentGatewaysTab';
 
 interface SettingsSecurityTabProps {
@@ -42,8 +41,7 @@ export function SettingsSecurityTab({
   const [statusMsg, setStatusMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
   // Settings State
-  const [siteName, setSiteName] = useState('MarriageMediaUSA.com');
-  const [adminPasscode, setAdminPasscode] = useState('MMU-ADMIN-2026');
+  const [siteName, setSiteName] = useState('MuslimBibah.com');
   const [mandatoryWali, setMandatoryWali] = useState(true);
   const [purdahDefault, setPurdahDefault] = useState<'BLURRED' | 'PUBLIC'>('BLURRED');
   const [chatFilterActive, setChatFilterActive] = useState(true);
@@ -58,25 +56,6 @@ export function SettingsSecurityTab({
 
   // Telemetry Ping State
   const [telemetryResult, setTelemetryResult] = useState<string | null>(null);
-  const [seedingFirestore, setSeedingFirestore] = useState(false);
-
-  const handleSeedFirestore = async () => {
-    setSeedingFirestore(true);
-    try {
-      const res = await seedFirestoreInitialData();
-      if (res.success) {
-        setStatusMsg({ text: `✓ Successfully seeded default matrimonial packages into Cloud Firestore!`, isError: false });
-      } else {
-        setStatusMsg({ text: 'Packages already populated or verified in Cloud Firestore.', isError: false });
-      }
-      setTimeout(() => setStatusMsg(null), 4000);
-    } catch (err: any) {
-      setStatusMsg({ text: `Seeding error: ${err.message}`, isError: true });
-    } finally {
-      setSeedingFirestore(false);
-    }
-  };
-
   // Cross-Tab Reactivity
   useCrossTabSync((msg) => {
     if (msg.type === 'SETTINGS_UPDATED') {
@@ -247,20 +226,6 @@ export function SettingsSecurityTab({
           <div className="card-3d" style={{ padding: '24px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '1.1rem', fontWeight: 800 }}>Platform Credentials & Passcodes</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={labelStyle}>Administrator Registration Passcode</label>
-                <input
-                  type="text"
-                  value={adminPasscode}
-                  onChange={(e) => setAdminPasscode(e.target.value)}
-                  className="input-field"
-                  style={inputStyle}
-                />
-                <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  Required on /register to provision internal staff accounts.
-                </p>
-              </div>
-
               <div>
                 <label style={labelStyle}>Session Token Expiration (Days)</label>
                 <input
@@ -669,14 +634,14 @@ export function SettingsSecurityTab({
             </div>
           )}
 
-          {/* Cloud Firebase & Serverless Architecture */}
+          {/* Authoritative data source */}
           <div
             style={{
               marginTop: 20,
               padding: '18px 20px',
               borderRadius: 12,
-              background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
-              border: '1.5px solid #FCD34D',
+              background: 'linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%)',
+              border: '1.5px solid #A7F3D0',
               display: 'flex',
               flexDirection: 'column',
               gap: 12,
@@ -684,46 +649,26 @@ export function SettingsSecurityTab({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: '1.2rem' }}>🔥</span>
+                <span style={{ fontSize: '1.2rem' }}>🗄️</span>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#92400E' }}>
-                    Google Cloud Firebase & Firestore Integration
+                    PostgreSQL membership source of truth
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#B45309' }}>
-                    Project: <strong>marriagemediausamodern</strong> • Hosting: Free Tier Serverless Static
+                  <div style={{ fontSize: '0.75rem', color: '#047857' }}>
+                    Packages, accounts, profiles, and subscriptions are managed from the application database.
                   </div>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={handleSeedFirestore}
-                disabled={seedingFirestore}
-                className="btn-3d"
-                style={{
-                  fontSize: '0.8rem',
-                  padding: '8px 14px',
-                  background: 'linear-gradient(135deg, #D97706, #B45309)',
-                  color: '#fff',
-                  border: 'none',
-                }}
-              >
-                {seedingFirestore ? 'Seeding Firestore...' : 'Seed Default Packages to Firestore'}
-              </button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-              <div style={{ padding: '8px 12px', borderRadius: 8, background: '#fff', border: '1px solid #FDE68A', fontSize: '0.75rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Firestore Rules:</span>{' '}
-                <strong style={{ color: '#047857' }}>Active RBAC (441 lines)</strong>
+              <div style={{ padding: '8px 12px', borderRadius: 8, background: '#fff', border: '1px solid #A7F3D0', fontSize: '0.75rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Package changes:</span>{' '}
+                <strong style={{ color: '#047857' }}>Read back from PostgreSQL</strong>
               </div>
-              <div style={{ padding: '8px 12px', borderRadius: 8, background: '#fff', border: '1px solid #FDE68A', fontSize: '0.75rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Auth Provider:</span>{' '}
-                <strong style={{ color: '#047857' }}>Firebase Auth + Session</strong>
-              </div>
-              <div style={{ padding: '8px 12px', borderRadius: 8, background: '#fff', border: '1px solid #FDE68A', fontSize: '0.75rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Hosting Target:</span>{' '}
-                <strong style={{ color: '#047857' }}>Static Export (out/)</strong>
+              <div style={{ padding: '8px 12px', borderRadius: 8, background: '#fff', border: '1px solid #A7F3D0', fontSize: '0.75rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Membership grants:</span>{' '}
+                <strong style={{ color: '#047857' }}>Admin grant is not a payment</strong>
               </div>
             </div>
           </div>

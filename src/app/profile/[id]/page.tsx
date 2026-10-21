@@ -18,28 +18,32 @@ import {
   FileText,
 } from 'lucide-react';
 
-export function generateStaticParams() {
-  const profiles = DomainRepository.getProfiles();
-  return profiles.map((p) => ({
-    id: p.profile_id,
-  }));
-}
+import { notFound } from 'next/navigation';
+import { getPublicProfileByIdFromDb } from '@/db/queries';
+import { connection } from 'next/server';
+
+export const instant = false;
 
 export default async function SingleProfilePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await connection();
   const { id } = await params;
-  const profile = DomainRepository.getProfileById(id) || DomainRepository.getProfiles()[0];
+  const profile = await getPublicProfileByIdFromDb(id);
+
+  if (!profile) {
+    notFound();
+  }
 
 
   const isPurdah = profile.photo_privacy === 'BLURRED_PURDAH';
   const photoUrl =
     profile.photo_url ||
     (profile.gender === 'FEMALE'
-      ? 'https://marriagemediausa.com/design/member_image/2018055584_1526196452_1.jpg'
-      : 'https://marriagemediausa.com/design/member_image/2021027948_1622089820_1.jpg');
+      ? 'https://muslimbibah.com/design/member_image/2018055584_1526196452_1.jpg'
+      : 'https://muslimbibah.com/design/member_image/2021027948_1622089820_1.jpg');
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-app)', display: 'flex', flexDirection: 'column' }}>

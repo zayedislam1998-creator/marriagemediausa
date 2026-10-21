@@ -1,49 +1,62 @@
 import Link from 'next/link';
 import { BookOpen, Clock, ArrowRight } from 'lucide-react';
 
-export function IslamicAdviceHub() {
-  const articles = [
-    {
-      title: 'The Mutual Rights & Responsibilities of Husband and Wife in Islam',
-      category: 'Sunnah Marriage Guidelines',
-      readTime: '6 min read',
-      author: 'Sheikh Dr. Tariq Al-Mansoor',
-      snippet:
-        'A comprehensive guide to Mawaddah (deep love) and Rahmah (mercy) in the marital home, balancing emotional care, financial dignity, and spiritual partnership.',
-      badgeColor: 'badge-emerald',
-      accent: '#059669',
-    },
-    {
-      title: '12 Essential Questions to Clarify Before Finalizing Your Nikkah',
-      category: 'Pre-Marital Counseling',
-      readTime: '8 min read',
-      author: 'Ustadha Fatima Siddiqui, LMFT',
-      snippet:
-        'Practical communication frameworks covering religious practice, family living arrangements, career goals, financial habits, and conflict resolution.',
-      badgeColor: 'badge-sapphire',
-      accent: '#0284C7',
-    },
-    {
-      title: 'Understanding Mahr (Dower) According to Authentic Sunnah',
-      category: 'Islamic Jurisprudence',
-      readTime: '5 min read',
-      author: 'Mufti Ahmadullah Qasimi',
-      snippet:
-        'The sacred wisdom behind Mahr as an honor for the bride, avoiding excessive cultural burdens, and adhering to prophetic simplicity.',
-      badgeColor: 'badge-gold',
-      accent: '#D97706',
-    },
-    {
-      title: 'The Sacred Role & Blessing of the Wali (Guardian) in Matrimony',
-      category: 'Family Wisdom',
-      readTime: '7 min read',
-      author: 'Imam Siraj Wahhaj & Council',
-      snippet:
-        'Why Islam mandates the Wali to protect the bride from deception, evaluate suitors with maturity, and ensure a blessed union based on righteousness.',
-      badgeColor: 'badge-coral',
-      accent: '#e74c3c',
-    },
-  ];
+const DEFAULT_ARTICLES = [
+  {
+    title: 'The Mutual Rights & Responsibilities of Husband and Wife in Islam',
+    category: 'Sunnah Marriage Guidelines',
+    readTime: '6 min read',
+    author: 'Sheikh Dr. Tariq Al-Mansoor',
+    snippet:
+      'A comprehensive guide to Mawaddah (deep love) and Rahmah (mercy) in the marital home, balancing emotional care, financial dignity, and spiritual partnership.',
+    badgeColor: 'badge-emerald',
+    accent: '#059669',
+  },
+  {
+    title: '12 Essential Questions to Clarify Before Finalizing Your Nikkah',
+    category: 'Pre-Marital Counseling',
+    readTime: '8 min read',
+    author: 'Ustadha Fatima Siddiqui, LMFT',
+    snippet:
+      'Practical communication frameworks covering religious practice, family living arrangements, career goals, financial habits, and conflict resolution.',
+    badgeColor: 'badge-sapphire',
+    accent: '#0284C7',
+  },
+  {
+    title: 'Understanding Mahr (Dower) According to Authentic Sunnah',
+    category: 'Islamic Jurisprudence',
+    readTime: '5 min read',
+    author: 'Mufti Ahmadullah Qasimi',
+    snippet:
+      'The sacred wisdom behind Mahr as an honor for the bride, avoiding excessive cultural burdens, and adhering to prophetic simplicity.',
+    badgeColor: 'badge-gold',
+    accent: '#D97706',
+  },
+  {
+    title: 'The Sacred Role & Blessing of the Wali (Guardian) in Matrimony',
+    category: 'Family Wisdom',
+    readTime: '7 min read',
+    author: 'Imam Siraj Wahhaj & Council',
+    snippet:
+      'Why Islam mandates the Wali to protect the bride from deception, evaluate suitors with maturity, and ensure a blessed union based on righteousness.',
+    badgeColor: 'badge-coral',
+    accent: '#e74c3c',
+  },
+];
+
+export function IslamicAdviceHub({ articles: dbArticles }: { articles?: any[] }) {
+  const articles =
+    dbArticles && dbArticles.length > 0
+      ? dbArticles.map((a, idx) => ({
+          title: a.title,
+          category: a.category,
+          readTime: `${Math.max(4, Math.ceil((a.content?.length || 500) / 450))} min read`,
+          author: a.author || 'Editorial Board',
+          snippet: a.excerpt || a.content?.slice(0, 160),
+          badgeColor: ['badge-emerald', 'badge-sapphire', 'badge-gold', 'badge-coral'][idx % 4],
+          accent: ['#059669', '#0284C7', '#D97706', '#e74c3c'][idx % 4],
+        }))
+      : DEFAULT_ARTICLES;
 
   return (
     <section

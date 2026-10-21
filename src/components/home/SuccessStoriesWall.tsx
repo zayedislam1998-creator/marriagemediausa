@@ -24,27 +24,27 @@ const REAL_STORIES = [
     location: 'Dhaka & New York Diaspora',
     date: 'Blessed Nikkah Union',
     snippet:
-      'I Found My Groom Through Marriage Media USA Site, Which Transformed My Life. I Had Never Imagined That It Will Be Done Through Internet. Your Service Is Very Good And I Am Very Happy That Our Families Connected With Complete Honour.',
+      'I Found My Groom Through MuslimBibah Site, Which Transformed My Life. I Had Never Imagined That It Will Be Done Through Internet. Your Service Is Very Good And I Am Very Happy That Our Families Connected With Complete Honour.',
   },
   {
     id: 16,
     names: 'Farzana & Faisal',
-    headline: 'Found My Life Partner on Marriage Media USA',
+    headline: 'Found My Life Partner on MuslimBibah',
     image: '/images/slider/Bride.webp',
     location: 'United States & Bangladesh',
     date: 'Blessed Nikkah Union',
     snippet:
-      'Marriage Media USA has played an important role in our lives. Our families met through Marriage Media USA. I am thankful to Marriage Media USA for helping me find my life partner. We both and our family are extremely happy with the 10-Level verification.',
+      'MuslimBibah has played an important role in our lives. Our families met through MuslimBibah. I am thankful to MuslimBibah for helping me find my life partner. We both and our family are extremely happy with the 10-Level verification.',
   },
   {
     id: 14,
     names: 'Nayeem & Khadeja',
-    headline: 'Found My Dream Partner on Marriage Media USA',
+    headline: 'Found My Dream Partner on MuslimBibah',
     image: '/images/story-nayeem.jpg',
     location: 'Global Muslim Matrimony',
     date: 'Blessed Nikkah Union',
     snippet:
-      'Thanks to Marriage Media USA for helping us find each other and making our dream come true. It is the best way to search and find your life partner as per our dreams and Islamic family etiquette.',
+      'Thanks to MuslimBibah for helping us find each other and making our dream come true. It is the best way to search and find your life partner as per our dreams and Islamic family etiquette.',
   },
 ];
 
@@ -55,7 +55,7 @@ const TESTIMONIAL_SLIDES = [
     role: 'Verified Member • Profile #2018054077',
     avatar: '/images/demo3.png',
     quote:
-      'Alhamdulillah, MarriageMediaUSA.com stands apart from every other matrimony site because of its 10-Level Profile Verification and mandatory Wali involvement. Our parents were able to speak directly with complete confidence and dignity.',
+      'Alhamdulillah, MuslimBibah.com stands apart from every other matrimony site because of its 10-Level Profile Verification and mandatory Wali involvement. Our parents were able to speak directly with complete confidence and dignity.',
     rating: 5,
   },
   {
@@ -73,7 +73,7 @@ const TESTIMONIAL_SLIDES = [
     role: 'Verified Member • Profile #2020098524',
     avatar: '/uploads/avatars/2020098524.webp',
     quote:
-      'The search by Mother Tongue, Profession, City, and Country made finding compatible families effortless. We highly recommend MarriageMediaUSA.com to every Muslim family in the USA, UK, Canada, and Bangladesh.',
+      'The search by Mother Tongue, Profession, City, and Country made finding compatible families effortless. We highly recommend MuslimBibah.com to every Muslim family in the USA, UK, Canada, and Bangladesh.',
     rating: 5,
   },
 ];
@@ -84,9 +84,40 @@ const CAMPAIGN_BANNERS = [
   '/images/banner-001.jpg',
 ];
 
-export function SuccessStoriesWall() {
+interface SuccessStoriesWallProps {
+  stories?: Array<{
+    id: number | string;
+    coupleNames?: string | null;
+    names?: string | null;
+    title?: string | null;
+    headline?: string | null;
+    story?: string | null;
+    storyBody?: string | null;
+    snippet?: string | null;
+    imageUrl?: string | null;
+    image?: string | null;
+    weddingDate?: string | null;
+    marriageDate?: string | null;
+    date?: string | null;
+    location?: string | null;
+  }>;
+}
+
+export function SuccessStoriesWall({ stories }: SuccessStoriesWallProps) {
   const [activeTestimonial, setActiveTestimonial] = useState(0);
   const [activeBanner, setActiveBanner] = useState(0);
+
+  const displayStories = stories && stories.length > 0
+    ? stories.map((s) => ({
+        id: s.id,
+        names: s.coupleNames || s.names || 'Blessed Couple',
+        headline: s.title || s.headline || 'Blessed Nikkah Union',
+        image: s.imageUrl || s.image || '/images/slider/Marriage_Muslim.webp',
+        location: s.location || 'Verified Matrimony Union',
+        date: s.weddingDate || s.marriageDate || s.date || 'Blessed Nikkah Union',
+        snippet: s.storyBody || s.story || s.snippet || 'Alhamdulillah, found each other through MuslimBibah.com with complete halal family consent.',
+      }))
+    : REAL_STORIES;
 
   useEffect(() => {
     const t1 = setInterval(() => {
@@ -133,14 +164,14 @@ export function SuccessStoriesWall() {
             <img src="/images/w-title-b.png" alt="Divider" />
           </div>
           <p style={{ color: '#475569', fontSize: '0.925rem', maxWidth: 650, margin: '0 auto' }}>
-            Meet real couples who found their life partners through MarriageMediaUSA.com and united their families
+            Meet real couples who found their life partners through MuslimBibah.com and united their families
             in blessed Nikkah.
           </p>
         </div>
 
         {/* Real Stories (Swipe on Mobile, 3-Col on Desktop) */}
         <div className="mobile-horizontal-scroll" style={{ marginBottom: '4rem' }}>
-          {REAL_STORIES.map((story) => (
+          {displayStories.map((story) => (
             <div
               key={story.id}
               className="card-3d-rose"
@@ -216,7 +247,7 @@ export function SuccessStoriesWall() {
 
         {/* ============================================================
             2. READY TO JOIN / ALREADY REGISTERED 3D PARALLAX CTA BANNER
-               (Matching live marriagemediausa.com video_area)
+               (Matching live muslimbibah.com video_area)
            ============================================================ */}
         <div
           style={{
@@ -224,7 +255,7 @@ export function SuccessStoriesWall() {
             borderRadius: 24,
             overflow: 'hidden',
             marginBottom: '4rem',
-            backgroundImage: 'url(https://marriagemediausa.com/design/admin_panel/slider/wedding-1556963483.jpg)',
+            backgroundImage: 'url(https://muslimbibah.com/design/admin_panel/slider/wedding-1556963483.jpg)',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             boxShadow: '0 24px 50px -12px rgba(15, 23, 42, 0.35), 0 6px 0 #059669',
@@ -402,7 +433,7 @@ export function SuccessStoriesWall() {
 
         {/* ============================================================
             4. MATRIMONIAL VIDEO SHOWCASE & PARTNER BANNER CAROUSEL
-               (Matching video_area-custom & myCarousel on live marriagemediausa.com)
+               (Matching video_area-custom & myCarousel on live muslimbibah.com)
            ============================================================ */}
         <div>
           <div className="ornamental-header">
@@ -433,12 +464,12 @@ export function SuccessStoriesWall() {
                 style={{ width: '100%', height: 280, borderRadius: 14, objectFit: 'cover' }}
               >
                 <source
-                  src="https://marriagemediausa.com/design/admin_panel/video_images/videoplayback.mp4"
+                  src="https://muslimbibah.com/design/admin_panel/video_images/videoplayback.mp4"
                   type="video/mp4"
                 />
               </video>
               <div style={{ padding: '10px 6px 2px', color: '#ffffff', fontWeight: 800, fontSize: '0.9rem' }}>
-                🎬 Marriage Media USA Official Matrimonial Story Highlight #1
+                🎬 MuslimBibah Official Matrimonial Story Highlight #1
               </div>
             </div>
 
@@ -450,7 +481,7 @@ export function SuccessStoriesWall() {
                 style={{ width: '100%', height: 280, borderRadius: 14, objectFit: 'cover' }}
               >
                 <source
-                  src="https://marriagemediausa.com/design/admin_panel/video_images/Most_Beautiful_Virat_and_Anushkas_Loving_Ad.mp4"
+                  src="https://muslimbibah.com/design/admin_panel/video_images/Most_Beautiful_Virat_and_Anushkas_Loving_Ad.mp4"
                   type="video/mp4"
                 />
               </video>
@@ -460,7 +491,7 @@ export function SuccessStoriesWall() {
             </div>
           </div>
 
-          {/* Rotating Partner Banner Strip from live marriagemediausa.com */}
+          {/* Rotating Partner Banner Strip from live muslimbibah.com */}
           <div
             className="card-3d"
             style={{
@@ -473,7 +504,7 @@ export function SuccessStoriesWall() {
           >
             <img
               src={CAMPAIGN_BANNERS[activeBanner]}
-              alt="Marriage Media USA Partner Banner"
+              alt="MuslimBibah Partner Banner"
               style={{
                 width: '100%',
                 height: 105,

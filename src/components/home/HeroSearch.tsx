@@ -20,6 +20,8 @@ interface HeroSearchProps {
   countries: Country[];
   usStates: USState[];
   professions: string[];
+  heroCopy?: { tagline?: string; subtitle?: string };
+  campaignBanners?: Array<{ id: string; name: string; placement: string; targetRegion: string; active: boolean }>;
   onSearch?: (criteria: any) => void;
 }
 
@@ -99,7 +101,7 @@ const HERO_SLIDES = [
     title: 'Love Is A Universal Blessing',
     highlight: 'Experienced Through Sacred Halal Nikkah',
     subtitle:
-      'Join MarriageMediaUSA.com today for free, create your 85+ field Islamic biodata, and express interest to verified suitors worldwide.',
+      'Join MuslimBibah.com today for free, create your 85+ field Islamic biodata, and express interest to verified suitors worldwide.',
     cardHeading: 'Gateway to Happy Marriages',
     cardSubtext: 'Create your comprehensive 85+ field Islamic biodata in under 3 minutes for free.',
     stats: '100% Free Lifetime',
@@ -128,7 +130,7 @@ const MOTHER_TONGUES = [
   'Marathi',
 ];
 
-export function HeroSearch({ countries, usStates, professions, onSearch }: HeroSearchProps) {
+export function HeroSearch({ countries, usStates, professions, heroCopy, campaignBanners, onSearch }: HeroSearchProps) {
   const router = useRouter();
   const [activeSlide, setActiveSlide] = useState(0);
   const [lookingFor, setLookingFor] = useState<'FEMALE' | 'MALE'>('FEMALE');
@@ -138,6 +140,18 @@ export function HeroSearch({ countries, usStates, professions, onSearch }: HeroS
   const [selectedLanguage, setSelectedLanguage] = useState('All Languages');
   const [selectedProfession, setSelectedProfession] = useState('All');
   const [profileIdQuery, setProfileIdQuery] = useState('');
+
+  const activeCampaign = campaignBanners?.find((c) => c.active);
+  const slides = HERO_SLIDES.map((slide, idx) => {
+    if (idx === 0 && heroCopy?.tagline) {
+      return {
+        ...slide,
+        title: heroCopy.tagline,
+        subtitle: heroCopy.subtitle || slide.subtitle,
+      };
+    }
+    return slide;
+  });
 
   // Auto-advance hero slider every 5.5 seconds
   useEffect(() => {
@@ -174,7 +188,7 @@ export function HeroSearch({ countries, usStates, professions, onSearch }: HeroS
     }
   };
 
-  const currentSlide = HERO_SLIDES[activeSlide];
+  const currentSlide = slides[activeSlide] || slides[0];
 
   return (
     <section
@@ -199,7 +213,45 @@ export function HeroSearch({ countries, usStates, professions, onSearch }: HeroS
           boxShadow: '0 20px 50px rgba(15, 23, 42, 0.35)',
         }}
       >
-        {HERO_SLIDES.map((slide, index) => {
+        {/* Campaign Announcement Ribbon */}
+        {activeCampaign && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '1rem',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 30,
+              padding: '0.4rem 1.25rem',
+              borderRadius: '9999px',
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.9) 0%, rgba(16, 185, 129, 0.9) 100%)',
+              color: '#0f172a',
+              fontWeight: 700,
+              fontSize: '0.825rem',
+              letterSpacing: '0.02em',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              pointerEvents: 'none',
+            }}
+          >
+            <span>📢 {activeCampaign.name}</span>
+            {activeCampaign.targetRegion && (
+              <span
+                style={{
+                  background: 'rgba(255,255,255,0.3)',
+                  padding: '0.1rem 0.5rem',
+                  borderRadius: '9999px',
+                  fontSize: '0.75rem',
+                }}
+              >
+                {activeCampaign.targetRegion}
+              </span>
+            )}
+          </div>
+        )}
+        {slides.map((slide, index) => {
           const isCurrent = index === activeSlide;
           return (
             <div
@@ -214,7 +266,7 @@ export function HeroSearch({ countries, usStates, professions, onSearch }: HeroS
                 zIndex: isCurrent ? 2 : 1,
               }}
             >
-              {/* Slide Background Image from live marriagemediausa.com */}
+              {/* Slide Background Image from live muslimbibah.com */}
               <img
                 src={slide.image}
                 alt={slide.title}
@@ -740,7 +792,7 @@ export function HeroSearch({ countries, usStates, professions, onSearch }: HeroS
               </div>
             </div>
 
-            {/* Direct Profile ID Search Box (From live marriagemediausa.com) */}
+            {/* Direct Profile ID Search Box (From live muslimbibah.com) */}
             <div className="hero-search-id-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
                 type="text"
@@ -756,7 +808,7 @@ export function HeroSearch({ countries, usStates, professions, onSearch }: HeroS
             </div>
           </div>
 
-          {/* 5-Column Search Filter Grid (Matching live marriagemediausa.com + US Diaspora) */}
+          {/* 5-Column Search Filter Grid (Matching live muslimbibah.com + US Diaspora) */}
           <div
             className="hero-search-filters-grid"
             style={{
@@ -766,7 +818,7 @@ export function HeroSearch({ countries, usStates, professions, onSearch }: HeroS
               alignItems: 'flex-end',
             }}
           >
-            {/* 1. Age Range (16 to 80 as in live marriagemediausa.com) */}
+            {/* 1. Age Range (16 to 80 as in live muslimbibah.com) */}
             <div>
               <label
                 style={{
@@ -839,7 +891,7 @@ export function HeroSearch({ countries, usStates, professions, onSearch }: HeroS
               </select>
             </div>
 
-            {/* 3. Mother Tongue (Exact list from live marriagemediausa.com) */}
+            {/* 3. Mother Tongue (Exact list from live muslimbibah.com) */}
             <div>
               <label
                 style={{

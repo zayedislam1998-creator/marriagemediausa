@@ -1231,13 +1231,13 @@ export function SearchWorkspace({
                   >
                     {/* Top Image Box with Compatibility Ring & Badges */}
                     <div style={{ position: 'relative', width: '100%', height: 260, background: '#0F172A', overflow: 'hidden' }}>
-                      {/* Real Member Photo from MarriageMediaUSA.com */}
+                      {/* Real Member Photo from MuslimBibah.com */}
                       <img
                         src={
                           p.photo_url ||
                           (p.gender === 'FEMALE'
-                            ? 'https://marriagemediausa.com/design/member_image/2018055584_1526196452_1.jpg'
-                            : 'https://marriagemediausa.com/design/member_image/2021027948_1622089820_1.jpg')
+                            ? 'https://muslimbibah.com/design/member_image/2018055584_1526196452_1.jpg'
+                            : 'https://muslimbibah.com/design/member_image/2021027948_1622089820_1.jpg')
                         }
                         alt={p.full_name}
                         style={{
@@ -1541,8 +1541,8 @@ export function SearchWorkspace({
                     src={
                       selectedProfile.photo_url ||
                       (selectedProfile.gender === 'FEMALE'
-                        ? 'https://marriagemediausa.com/design/member_image/2018055584_1526196452_1.jpg'
-                        : 'https://marriagemediausa.com/design/member_image/2021027948_1622089820_1.jpg')
+                        ? 'https://muslimbibah.com/design/member_image/2018055584_1526196452_1.jpg'
+                        : 'https://muslimbibah.com/design/member_image/2021027948_1622089820_1.jpg')
                     }
                     alt={selectedProfile.full_name}
                     style={{
@@ -1873,8 +1873,8 @@ export function SearchWorkspace({
                     src={
                       selectedProfile.photo_url ||
                       (selectedProfile.gender === 'FEMALE'
-                        ? 'https://marriagemediausa.com/design/member_image/2018055584_1526196452_1.jpg'
-                        : 'https://marriagemediausa.com/design/member_image/2021027948_1622089820_1.jpg')
+                        ? 'https://muslimbibah.com/design/member_image/2018055584_1526196452_1.jpg'
+                        : 'https://muslimbibah.com/design/member_image/2021027948_1622089820_1.jpg')
                     }
                     alt={selectedProfile.full_name}
                     style={{

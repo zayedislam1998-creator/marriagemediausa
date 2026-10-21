@@ -25,9 +25,9 @@ interface GatewayConfig {
   isActive: boolean;
   publicKey: string;
   secretKeyMasked: string;
-  secretKeyRaw: string;
+  hasSecretKey: boolean;
   webhookSecretMasked: string;
-  webhookSecretRaw: string;
+  hasWebhookSecret: boolean;
   webhookId?: string;
   settingsJson: Record<string, any>;
   lastTestedAt?: string | null;
@@ -78,8 +78,8 @@ export function PaymentGatewaysTab() {
           setStripeActive(stripe.isActive);
           setStripeMode(stripe.mode);
           setStripePk(stripe.publicKey || '');
-          setStripeSk(stripe.secretKeyRaw || '');
-          setStripeWebhookSecret(stripe.webhookSecretRaw || '');
+          setStripeSk('');
+          setStripeWebhookSecret('');
           if (stripe.testStatus) {
             setStripeTestResult({
               success: stripe.testStatus === 'SUCCESS',
@@ -94,7 +94,7 @@ export function PaymentGatewaysTab() {
           setPaypalActive(paypal.isActive);
           setPaypalMode(paypal.mode);
           setPaypalClientId(paypal.publicKey || '');
-          setPaypalSecret(paypal.secretKeyRaw || '');
+          setPaypalSecret('');
           setPaypalWebhookId(paypal.webhookId || '');
           if (paypal.testStatus) {
             setPaypalTestResult({
@@ -198,7 +198,8 @@ export function PaymentGatewaysTab() {
       });
       const data = await res.json();
       if (data.success) {
-        setStatusMsg({ text: '✓ Stripe credentials and configuration saved securely in PostgreSQL!', isError: false });
+        setStripeActive(Boolean(data.isActive));
+        setStatusMsg({ text: data.message || 'Stripe settings saved.', isError: false });
         setTimeout(() => setStatusMsg(null), 4000);
       } else {
         setStatusMsg({ text: `Failed to save Stripe: ${data.error}`, isError: true });
@@ -227,7 +228,8 @@ export function PaymentGatewaysTab() {
       });
       const data = await res.json();
       if (data.success) {
-        setStatusMsg({ text: '✓ PayPal credentials and configuration saved securely in PostgreSQL!', isError: false });
+        setPaypalActive(Boolean(data.isActive));
+        setStatusMsg({ text: data.message || 'PayPal settings saved.', isError: false });
         setTimeout(() => setStatusMsg(null), 4000);
       } else {
         setStatusMsg({ text: `Failed to save PayPal: ${data.error}`, isError: true });
@@ -272,6 +274,10 @@ export function PaymentGatewaysTab() {
           <span>{statusMsg.text}</span>
         </div>
       )}
+
+      <div style={{ padding: 14, borderRadius: 10, border: '1px solid #FCD34D', background: '#FFFBEB', color: '#78350F', fontSize: '.84rem', lineHeight: 1.6 }}>
+        Before saving secret keys, configure <code>PAYMENT_CREDENTIALS_ENCRYPTION_KEY</code> on the server with a 32-byte hex key (for example, generate one with <code>openssl rand -hex 32</code>). Save settings while disabled, run the connection test, then enable and save again. Secret keys are write-only here.
+      </div>
 
       {/* Header Info */}
       <div className="card-3d" style={{ padding: 24, background: '#FFFFFF' }}>

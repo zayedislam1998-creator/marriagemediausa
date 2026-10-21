@@ -23,6 +23,7 @@ import {
   FileText,
   UserCheck,
   UserPlus,
+  UploadCloud,
 } from 'lucide-react';
 import { AdminMemberRecord } from '@/db/queries';
 import {
@@ -31,15 +32,18 @@ import {
   adminUpdateMemberKycAction,
 } from '@/lib/auth/actions';
 import { adminAssignMemberTierAction } from '@/lib/admin/packageActions';
-import { adminSetMemberAccess } from '@/lib/firebase/authService';
 import { createAdminAccountAction, getAdminMembersAction } from '@/lib/admin/actions';
+import { broadcastSyncEvent } from '@/lib/sync/broadcastSync';
+import { BulkImportMemberModal } from './BulkImportMemberModal';
 
 interface MembersDirectoryTabProps {
   initialMembers: AdminMemberRecord[];
+  packages: Array<{ id: number; name: string; priceUsd: number; contactCredits: number; isActive: boolean }>;
 }
 
-export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps) {
+export function MembersDirectoryTab({ initialMembers, packages }: MembersDirectoryTabProps) {
   const [members, setMembers] = useState<AdminMemberRecord[]>(initialMembers);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [genderFilter, setGenderFilter] = useState<string>('ALL');
@@ -166,25 +170,23 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
     }
   };
 
-  const handleTierChange = async (userId: string, newTier: 'FREE' | 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'ELITE') => {
+  const handleTierChange = async (userId: string, packageId: number) => {
     setActionLoading(true);
-    const res = await adminAssignMemberTierAction(userId, newTier);
-    try {
-      await adminSetMemberAccess(userId, newTier);
-    } catch {
-      // Graceful fallback if user is only in PostgreSQL
-    }
+    const res = await adminAssignMemberTierAction(userId, packageId);
     setActionLoading(false);
 
     if (res.success) {
+      const selectedPackage = packages.find((pkg) => pkg.id === packageId);
+      broadcastSyncEvent('MEMBERSHIP_UPDATED', { userId, packageId });
       setMembers((prev) =>
         prev.map((m) =>
           m.userId === userId
             ? {
                 ...m,
                 subscription: {
-                  packageName: res.packageName || `${newTier} Plan`,
-                  contactCreditsRemaining: m.subscription?.contactCreditsRemaining ?? 25,
+                  packageId,
+                  packageName: res.packageName || selectedPackage?.name || 'Membership',
+                  contactCreditsRemaining: selectedPackage?.contactCredits ?? 0,
                   status: 'ACTIVE',
                 },
               }
@@ -197,15 +199,16 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
             ? {
                 ...prev,
                 subscription: {
-                  packageName: res.packageName || `${newTier} Plan`,
-                  contactCreditsRemaining: prev.subscription?.contactCreditsRemaining ?? 25,
+                  packageId,
+                  packageName: res.packageName || selectedPackage?.name || 'Membership',
+                  contactCreditsRemaining: selectedPackage?.contactCredits ?? 0,
                   status: 'ACTIVE',
                 },
               }
             : null
         );
       }
-      setNotification({ type: 'success', message: res.message || `Granted ${newTier} Mode successfully.` });
+      setNotification({ type: 'success', message: res.message || `Granted ${selectedPackage?.name || 'membership'} successfully.` });
       setTimeout(() => setNotification(null), 4000);
     } else {
       setNotification({ type: 'error', message: res.error || 'Failed to update membership tier' });
@@ -361,6 +364,14 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setBulkImportOpen(true)}
+              className="btn-3d-gold"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', border: 0, borderRadius: 9, fontSize: '.8rem', fontWeight: 800, cursor: 'pointer' }}
+            >
+              <UploadCloud size={15} /> Bulk Import (CSV)
+            </button>
             <button
               type="button"
               onClick={() => { setAdminFormError(null); setAdminDialogOpen(true); }}
@@ -970,21 +981,12 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>Grant Mode:</span>
                   <select
-                    disabled={actionLoading}
-                    value={
-                      selectedMember.subscription?.packageName?.toUpperCase().includes('GOLD')
-                        ? 'GOLD'
-                        : selectedMember.subscription?.packageName?.toUpperCase().includes('BRONZE')
-                        ? 'BRONZE'
-                        : selectedMember.subscription?.packageName?.toUpperCase().includes('SILVER')
-                        ? 'SILVER'
-                        : selectedMember.subscription?.packageName?.toUpperCase().includes('DIAMOND')
-                        ? 'DIAMOND'
-                        : selectedMember.subscription?.packageName?.toUpperCase().includes('CONCIERGE') || selectedMember.subscription?.packageName?.toUpperCase().includes('ELITE')
-                        ? 'ELITE'
-                        : 'FREE'
-                    }
-                    onChange={(e) => handleTierChange(selectedMember.userId, e.target.value as any)}
+                    disabled={actionLoading || packages.length === 0}
+                    value={selectedMember.subscription?.packageId?.toString() || ''}
+                    onChange={(e) => {
+                      const packageId = Number(e.target.value);
+                      if (Number.isInteger(packageId) && packageId > 0) handleTierChange(selectedMember.userId, packageId);
+                    }}
                     style={{
                       padding: '6px 10px',
                       borderRadius: 8,
@@ -996,13 +998,14 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
                       cursor: 'pointer',
                     }}
                   >
-                    <option value="FREE">⚪ Free Explorer ($0)</option>
-                    <option value="BRONZE">🥉 Bronze Mode</option>
-                    <option value="SILVER">🥈 Silver Sunnah ($2,000)</option>
-                    <option value="GOLD">🥇 Gold Barakah ($3,000)</option>
-                    <option value="DIAMOND">💎 Diamond VIP ($4,000)</option>
-                    <option value="ELITE">👑 Elite Concierge ($6,500)</option>
+                    <option value="">{selectedMember.subscription?.packageName || 'No active membership'}</option>
+                    {packages.filter((pkg) => pkg.isActive).map((pkg) => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.name} — ${Number(pkg.priceUsd).toFixed(2)} / {pkg.contactCredits} credits
+                      </option>
+                    ))}
                   </select>
+                  <small style={{ color: 'var(--text-muted)' }}>Admin grant; no payment is recorded.</small>
                 </div>
 
                 {/* KYC Approval */}
@@ -1284,6 +1287,18 @@ export function MembersDirectoryTab({ initialMembers }: MembersDirectoryTabProps
           </div>
         </div>
       )}
+
+      {/* Bulk CSV Member Import Modal */}
+      <BulkImportMemberModal
+        isOpen={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        packages={packages}
+        onSuccess={() => {
+          getAdminMembersAction().then((res) => {
+            if (res.success) setMembers(res.members);
+          });
+        }}
+      />
     </div>
   );
 }

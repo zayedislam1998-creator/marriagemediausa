@@ -21,11 +21,13 @@ import {
   Bell,
   CreditCard,
   RefreshCw,
+  Mail,
 } from 'lucide-react';
 import { AdminMemberRecord, FormBuilderConfigRecord, ProfileRequirementRecord } from '@/db/queries';
 import { SeatMember, AuditLog } from '@/lib/admin/store';
 import { Package } from '@/db/repository';
 import { MembersDirectoryTab } from './MembersDirectoryTab';
+import { InquiriesInboxTab } from './InquiriesInboxTab';
 import { FormStudioTab } from './FormStudioTab';
 import { PricingPackagesTab } from './PricingPackagesTab';
 import { SettingsSecurityTab } from './SettingsSecurityTab';
@@ -56,17 +58,24 @@ export function AdminExecutiveLayout({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [provisionModalOpen, setProvisionModalOpen] = useState(false);
+  const [livePackages, setLivePackages] = useState<any[]>(initialPackages);
   const [activeTab, setActiveTab] = useState<
-    'members' | 'forms' | 'packages' | 'gateways' | 'kyc' | 'media' | 'analytics' | 'settings'
+    'members' | 'inquiries' | 'forms' | 'packages' | 'gateways' | 'kyc' | 'media' | 'analytics' | 'settings'
   >('members');
   const [seatActionMsg, setSeatActionMsg] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [analyticsData, setAnalyticsData] = useState<{
+    totalUsers?: number;
     totalMembers: number;
     totalProfiles: number;
     verifiedProfiles: number;
+    totalSubscriptions?: number;
     activeSubscriptions: number;
+    totalPaymentTransactions?: number;
+    completedPaymentTransactions?: number;
+    realPaymentTransactions?: number;
+    simulatedTransactions?: number;
     totalRevenue: number;
     packageBreakdown: Array<{
       id: number;
@@ -110,6 +119,10 @@ export function AdminExecutiveLayout({
   useEffect(() => {
     fetchNotifications();
     fetchAnalytics();
+    fetch('/api/packages?includeInactive=1', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => { if (data.success && Array.isArray(data.packages)) setLivePackages(data.packages); })
+      .catch((error) => console.error('Package list fetch failed:', error));
   }, []);
 
   // Real-Time Cross-Tab Reactivity Listener
@@ -117,6 +130,11 @@ export function AdminExecutiveLayout({
     setSeatActionMsg(`✓ Real-time event: ${msg.type.replace(/_/g, ' ')} detected!`);
     fetchNotifications();
     fetchAnalytics();
+    if (msg.type === 'PACKAGE_UPDATED') {
+      fetch('/api/packages?includeInactive=1', { cache: 'no-store' })
+        .then((res) => res.json())
+        .then((data) => { if (data.success && Array.isArray(data.packages)) setLivePackages(data.packages); });
+    }
     setTimeout(() => setSeatActionMsg(null), 4000);
   });
 
@@ -134,6 +152,14 @@ export function AdminExecutiveLayout({
       badgeColor: 'var(--emerald-600)',
     },
     {
+      id: 'inquiries' as const,
+      label: 'Inquiries & Concierge',
+      shortLabel: 'Inquiries',
+      icon: Mail,
+      badge: 'Inbox',
+      badgeColor: '#059669',
+    },
+    {
       id: 'forms' as const,
       label: 'Form Studio',
       shortLabel: 'Forms',
@@ -146,7 +172,7 @@ export function AdminExecutiveLayout({
       label: 'Pricing & Packages',
       shortLabel: 'Packages',
       icon: Award,
-      badge: `${initialPackages.length} Tiers`,
+      badge: `${livePackages.length} Tiers`,
       badgeColor: 'var(--sapphire-600)',
     },
     {
@@ -888,7 +914,12 @@ export function AdminExecutiveLayout({
 
         {/* VIEW 1: Members & Biodata Directory */}
         {activeTab === 'members' && (
-          <MembersDirectoryTab initialMembers={initialMembers} />
+          <MembersDirectoryTab initialMembers={initialMembers} packages={livePackages} />
+        )}
+
+        {/* VIEW 1.5: Inbound Inquiries & Concierge Desk */}
+        {activeTab === 'inquiries' && (
+          <InquiriesInboxTab />
         )}
 
         {/* VIEW 2: Form Studio (Login, Register, Profile, CV) */}
@@ -898,7 +929,7 @@ export function AdminExecutiveLayout({
 
         {/* VIEW 3: Pricing & Packages (Controlled Scroll, Flexible Durations, Zero Jargon) */}
         {activeTab === 'packages' && (
-          <PricingPackagesTab initialPackages={initialPackages} />
+          <PricingPackagesTab initialPackages={livePackages} />
         )}
 
         {/* VIEW 3.5: Payment Gateways (Stripe & PayPal Configuration and Live Ping Test) */}
@@ -987,7 +1018,7 @@ export function AdminExecutiveLayout({
               </button>
             </div>
 
-            {/* 4 Real Metric Cards */}
+            {/* 4 Real Metric Cards Grounded in All 4 PostgreSQL Tables */}
             <div
               style={{
                 display: 'grid',
@@ -997,49 +1028,49 @@ export function AdminExecutiveLayout({
             >
               <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  Total Platform Revenue
+                  Total Real Revenue (payment_transactions)
                 </div>
                 <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--emerald-600)', marginTop: 6 }}>
                   ${(analyticsData?.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, marginTop: 4 }}>
-                  ✓ Completed Transactions
+                  ✓ {analyticsData?.realPaymentTransactions ?? analyticsData?.completedPaymentTransactions ?? 0} Completed Non-Simulated Payments
                 </div>
               </div>
 
               <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  Active Paid Subscriptions
+                  Gateway Transactions (payment_transactions)
+                </div>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#6366F1', marginTop: 6 }}>
+                  {analyticsData?.totalPaymentTransactions ?? 0} Records
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#4F46E5', fontWeight: 700, marginTop: 4 }}>
+                  ✓ {analyticsData?.completedPaymentTransactions ?? 0} Completed • {analyticsData?.simulatedTransactions ?? 0} Simulated
+                </div>
+              </div>
+
+              <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                  Subscriptions (user_subscriptions)
                 </div>
                 <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--sapphire-600)', marginTop: 6 }}>
-                  {analyticsData?.activeSubscriptions ?? 0} Subscriptions
+                  {analyticsData?.activeSubscriptions ?? 0} Active / {analyticsData?.totalSubscriptions ?? analyticsData?.activeSubscriptions ?? 0} Total
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: 700, marginTop: 4 }}>
-                  ✓ Active in Database
+                  ✓ Live in user_subscriptions
                 </div>
               </div>
 
               <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  Registered Members & Biodatas
+                  Users & Profiles (users + profiles)
                 </div>
                 <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--gold-600)', marginTop: 6 }}>
-                  {analyticsData?.totalMembers ?? initialMembers.length} Members
+                  {analyticsData?.totalProfiles ?? initialMembers.length} Profiles ({analyticsData?.totalUsers ?? analyticsData?.totalMembers ?? initialMembers.length} Users)
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 700, marginTop: 4 }}>
-                  ✓ Authentic Member Profiles
-                </div>
-              </div>
-
-              <div className="card-3d" style={{ padding: 22, background: '#FFFFFF' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                  Verified Halal Profiles
-                </div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#10B981', marginTop: 6 }}>
-                  {analyticsData?.verifiedProfiles ?? 0} Verified
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 700, marginTop: 4 }}>
-                  ✓ KYC & Admin Approved
+                  ✓ {analyticsData?.verifiedProfiles ?? 0} KYC Verified Halal Profiles
                 </div>
               </div>
             </div>
@@ -1113,8 +1144,9 @@ export function AdminExecutiveLayout({
       <ProvisionMemberModal
         isOpen={provisionModalOpen}
         onClose={() => setProvisionModalOpen(false)}
+        packages={livePackages}
         onMemberProvisioned={(res) => {
-          setSeatActionMsg(`✓ Verified member provisioned: ${res.user?.email} (${res.profile?.fullName})`);
+          setSeatActionMsg(`✓ Member account created: ${res.user?.email} (${res.profile?.fullName})`);
           setTimeout(() => setSeatActionMsg(null), 4500);
         }}
       />

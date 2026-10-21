@@ -61,7 +61,7 @@ export function VitalCounters() {
           paddingInline: 'var(--space-lg)',
         }}
       >
-        {/* Ornamental Welcome Title (From live marriagemediausa.com) */}
+        {/* Ornamental Welcome Title (From live muslimbibah.com) */}
         <div className="ornamental-header">
           <h2>
             Welcome to <span>Muslim</span>Bibah

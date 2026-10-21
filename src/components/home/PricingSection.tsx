@@ -3,80 +3,43 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Check, Crown, ShieldCheck, Sparkles, Gift, ArrowRight } from 'lucide-react';
-import { Package } from '@/db/repository';
-import { getFirestorePackages } from '@/lib/firebase/firestoreService';
+import { Package, DomainRepository } from '@/db/repository';
 import { useCrossTabSync } from '@/lib/sync/broadcastSync';
 
 interface PricingSectionProps {
   packages: Package[];
 }
 
-const FREE_MEMBERSHIP_BENEFITS = [
-  'Search and view Marriage Profile',
-  'Publish your Marriage Profile on Marriage Media USA',
-  'Add Photo (Up to 5 Photos)',
-  'Manage Privacy Settings for Photo & Profile',
-  'Edit / Update your Marriage Profile',
-  'Specify Preferences for Desired Partner',
-  'Receive Notifications of Matching Profiles via Email',
-  'Express Interest in other Members',
-  'Receive Interest from other Members',
-  'Accept / Decline Interest received from other Members',
-  'Send Private Message to other Members (Conditions apply)',
-  'Receive Private Message from other Members',
-  'Respond to Private Message received',
-  'View your Profile Visitors',
-  'View Members who added you to their Favorite List',
-  'Add Members to your Favorite List',
-  'Block / Unblock or Report Members',
-  'Add Video in Your Profile',
-  'Upload Identity Documents to Get Profile Verified',
-];
-
-export function PricingSection({ packages }: PricingSectionProps) {
-  const [displayPackages, setDisplayPackages] = useState<any[]>(packages);
+export function PricingSection({ packages: initialPackages }: PricingSectionProps) {
+  const [displayPackages, setDisplayPackages] = useState<any[]>(() => {
+    if (initialPackages && initialPackages.length > 0) return initialPackages;
+    return DomainRepository.getPackages();
+  });
   const [showAllFreeFeatures, setShowAllFreeFeatures] = useState(false);
+  const [packageLoadError, setPackageLoadError] = useState<string | null>(null);
 
   const fetchLivePackages = async () => {
-    // 1. Primary Source of Truth: PostgreSQL database via /api/packages
     try {
-      const res = await fetch('/api/packages');
-      if (res.ok) {
+      const res = await fetch('/api/packages', { cache: 'no-store' });
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         if (data.success && Array.isArray(data.packages) && data.packages.length > 0) {
           setDisplayPackages(data.packages);
+          setPackageLoadError(null);
           return;
         }
       }
-    } catch {}
-
-    // 2. Fallback to Cloud Firestore
-    try {
-      const fbPkgs = await getFirestorePackages();
-      if (fbPkgs && fbPkgs.length > 0) {
-        const activePkgs = fbPkgs.filter((p) => p.isActive);
-        if (activePkgs.length > 0) {
-          const mapped = activePkgs.map((p, idx) => ({
-            id: p.id.startsWith('pkg_') ? p.id.replace('pkg_', '') : idx + 1,
-            name: p.name,
-            duration_months: p.durationMonths,
-            durationMonths: p.durationMonths,
-            price_usd: p.priceUsd,
-            priceUsd: p.priceUsd,
-            contact_credits: p.contactCredits,
-            contactCredits: p.contactCredits,
-            daily_profile_view_limit: p.dailyProfileViewLimit,
-            dailyProfileViewLimit: p.dailyProfileViewLimit,
-            features: p.features,
-            featuresJson: p.features,
-            badge_title: p.badgeTitle,
-            badgeTitle: p.badgeTitle,
-            is_active: p.isActive,
-          }));
-          setDisplayPackages(mapped);
-        }
+      if (!initialPackages || initialPackages.length === 0) {
+        setDisplayPackages(DomainRepository.getPackages());
       }
-    } catch {}
+      setPackageLoadError(null);
+    } catch {
+      if (!initialPackages || initialPackages.length === 0) {
+        setDisplayPackages(DomainRepository.getPackages());
+      }
+      setPackageLoadError(null);
+    }
   };
 
   useEffect(() => {
@@ -89,6 +52,9 @@ export function PricingSection({ packages }: PricingSectionProps) {
       fetchLivePackages();
     }
   }, ['PACKAGE_UPDATED']);
+
+  const freePackage = displayPackages.find((pkg) => Number(pkg.price_usd ?? pkg.priceUsd) === 0);
+  const freeFeatures: string[] = Array.isArray(freePackage?.features) ? freePackage.features : [];
 
   return (
     <section
@@ -111,7 +77,7 @@ export function PricingSection({ packages }: PricingSectionProps) {
         <div className="ornamental-header" style={{ marginBottom: 'var(--space-2xl)' }}>
           <div className="badge badge-gold" style={{ marginBottom: 8, boxShadow: '0 4px 10px rgba(217,119,6,0.15)' }}>
             <Crown size={13} />
-            Authentic MarriageMediaUSA.com Membership Plans
+            Authentic MuslimBibah.com Membership Plans
           </div>
           <h2
             style={{
@@ -133,6 +99,12 @@ export function PricingSection({ packages }: PricingSectionProps) {
             className="ornamental-divider"
           />
         </div>
+
+        {packageLoadError && (
+          <div role="status" style={{ textAlign: 'center', padding: 18, marginBottom: 20, borderRadius: 12, background: '#FEF2F2', color: '#991B1B' }}>
+            {packageLoadError}
+          </div>
+        )}
 
         {/* 3D Pricing Cards Grid (Swipe on Mobile, Multi-Col on Desktop) */}
         <div className="mobile-horizontal-scroll" style={{ alignItems: 'stretch', marginBottom: 'var(--space-3xl)' }}>
@@ -193,7 +165,7 @@ export function PricingSection({ packages }: PricingSectionProps) {
                     {pkg.name}
                   </h3>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}>
-                    Duration: {(pkg.duration_months ?? pkg.durationMonths ?? 1) > 100 ? 'Lifetime Validity' : `${pkg.duration_months ?? pkg.durationMonths ?? 1} Months`}
+                    Duration: `${pkg.duration_months ?? pkg.durationMonths ?? 1} Months`
                   </div>
                 </div>
 
@@ -230,7 +202,7 @@ export function PricingSection({ packages }: PricingSectionProps) {
                       ? '⚡ Unlimited Contact Unlocks'
                       : (pkg.contact_credits ?? pkg.contactCredits ?? 0) > 0
                       ? `✨ ${pkg.contact_credits ?? pkg.contactCredits ?? 0} Verified Contact Unlocks`
-                      : '🎁 19+ Free Matrimonial Features'}
+                      : `🎁 ${Array.isArray(pkg.features) ? pkg.features.length : 0} Free Plan Features`}
                   </div>
                 </div>
 
@@ -312,7 +284,7 @@ export function PricingSection({ packages }: PricingSectionProps) {
           })}
         </div>
 
-        {/* Real MarriageMediaUSA.com Free Membership Benefits Table */}
+        {freePackage && (
         <div
           className="card-3d"
           style={{
@@ -350,10 +322,10 @@ export function PricingSection({ packages }: PricingSectionProps) {
               </div>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--text-main)', margin: 0 }}>
-                  Marriage Media USA Free Membership Plan — 19 Included Features
+                  {freePackage.name} — Plan Features
                 </h3>
                 <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                  Every registered member on MarriageMediaUSA.com enjoys these 19 authentic matchmaking features at $0 cost:
+                  Current features and limits from the active PostgreSQL package.
                 </p>
               </div>
             </div>
@@ -382,7 +354,7 @@ export function PricingSection({ packages }: PricingSectionProps) {
               gap: 10,
             }}
           >
-            {FREE_MEMBERSHIP_BENEFITS.map((benefit, idx) => (
+            {freeFeatures.map((benefit, idx) => (
               <div
                 key={benefit}
                 className={!showAllFreeFeatures && idx >= 4 ? 'free-benefit-mobile-hidden' : ''}
@@ -440,10 +412,11 @@ export function PricingSection({ packages }: PricingSectionProps) {
             >
               {showAllFreeFeatures
                 ? 'Show Fewer Features ↑'
-                : `+ View All 19 Free Features (${FREE_MEMBERSHIP_BENEFITS.length - 4} More) ↓`}
+                : `+ View All Free Features (${Math.max(0, freeFeatures.length - 4)} More) ↓`}
             </button>
           </div>
         </div>
+        )}
       </div>
     </section>
   );

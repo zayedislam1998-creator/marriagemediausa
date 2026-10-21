@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 export type SyncEventType =
   | 'PROFILE_UPDATED'
   | 'MEMBER_PROVISIONED'
+  | 'MEMBERSHIP_UPDATED'
   | 'SETTINGS_UPDATED'
   | 'CV_UPDATED'
   | 'PACKAGE_UPDATED'
@@ -12,7 +13,7 @@ export type SyncEventType =
 
 export interface SyncMessage {
   type: SyncEventType;
-  payload?: any;
+  payload?: unknown;
   timestamp: number;
   sourceTabId: string;
 }
@@ -27,7 +28,7 @@ const CURRENT_TAB_ID = typeof window !== 'undefined'
 /**
  * Broadcast an event across all open tabs without full-page reloads.
  */
-export function broadcastSyncEvent(type: SyncEventType, payload?: any) {
+export function broadcastSyncEvent(type: SyncEventType, payload?: unknown) {
   if (typeof window === 'undefined') return;
 
   const message: SyncMessage = {
@@ -65,10 +66,12 @@ export function useCrossTabSync(
   listenTypes?: SyncEventType[]
 ) {
   const onSyncRef = useRef(onSync);
-  onSyncRef.current = onSync;
-
   const listenTypesRef = useRef(listenTypes);
-  listenTypesRef.current = listenTypes;
+
+  useEffect(() => {
+    onSyncRef.current = onSync;
+    listenTypesRef.current = listenTypes;
+  }, [onSync, listenTypes]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

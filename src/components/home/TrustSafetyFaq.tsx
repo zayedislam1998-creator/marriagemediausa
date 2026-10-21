@@ -9,18 +9,30 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 
-export function TrustSafetyFaq() {
+interface FaqItemInput {
+  q?: string;
+  question?: string;
+  a?: string;
+  answer?: string;
+  active?: boolean;
+}
+
+interface TrustSafetyFaqProps {
+  faqs?: FaqItemInput[];
+}
+
+export function TrustSafetyFaq({ faqs: initialFaqs }: TrustSafetyFaqProps = {}) {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
-  // Authentic FAQs from https://marriagemediausa.com/Welcome2/faq + Halal Matrimonial Governance
-  const faqs = [
+  // Default fallback FAQs
+  const defaultFaqs = [
     {
-      q: '1. How can I register on MarriageMediaUSA.com?',
-      a: 'Registration on MarriageMediaUSA.com is 100% free. Click on the "Register" button in the top navigation bar, fill in your basic profile information (Name, Gender, Date of Birth, Religion, Mother Tongue, Email, and Mobile Number), and submit. Once validated by our team, your profile becomes active for partner search.',
+      q: '1. How can I register on MuslimBibah.com?',
+      a: 'Registration on MuslimBibah.com is 100% free. Click on the "Register" button in the top navigation bar, fill in your basic profile information (Name, Gender, Date of Birth, Religion, Mother Tongue, Email, and Mobile Number), and submit. Once validated by our team, your profile becomes active for partner search.',
     },
     {
       q: '2. What is Profile Validation and 10-Level Verification?',
-      a: 'Every profile submitted on MarriageMediaUSA.com undergoes manual validation by our team before going live. Furthermore, members can earn Verification Badges across 10 credentials—Identity (Passport/NID/Driving License), Citizenship, Age, Education, Profession, Marital Status, Religion, Address, Mobile, and Email—by emailing supporting documents to support@marriagemediausa.com.',
+      a: 'Every profile submitted on MuslimBibah.com undergoes manual validation by our team before going live. Furthermore, members can earn Verification Badges across 10 credentials—Identity (Passport/NID/Driving License), Citizenship, Age, Education, Profession, Marital Status, Religion, Address, Mobile, and Email—by emailing supporting documents to support@muslimbibah.com.',
     },
     {
       q: '3. Can I register a marriage profile on behalf of a relative, son, daughter, or sibling?',
@@ -28,7 +40,7 @@ export function TrustSafetyFaq() {
     },
     {
       q: '4. What will be the privacy of my Photographs and Purdah Shield?',
-      a: 'Marriage Media USA provides strict photo privacy controls. You can keep your photographs visible to all members, visible only to registered/approved members, or protected behind our Purdah Modesty Blur Shield so that your clear photo is only revealed upon your explicit consent.',
+      a: 'MuslimBibah provides strict photo privacy controls. You can keep your photographs visible to all members, visible only to registered/approved members, or protected behind our Purdah Modesty Blur Shield so that your clear photo is only revealed upon your explicit consent.',
     },
     {
       q: '5. Why is Wali (Guardian) involvement mandatory for female biodatas?',
@@ -36,9 +48,19 @@ export function TrustSafetyFaq() {
     },
     {
       q: '6. How do I upgrade my membership or contact Customer Support?',
-      a: 'You can start with our Free Membership Plan (which includes 19+ features) or upgrade to Silver ($2,000), Gold ($3,000), Platinum ($4,000), or US Elite VIP ($6,500) for verified contact unlocks and dedicated matchmaking counselor assistance. For any assistance, email info@marriagemediausa.com or support@marriagemediausa.com.',
+      a: 'You can start with our Free Membership Plan (which includes 19+ features) or upgrade to Silver ($2,000), Gold ($3,000), Platinum ($4,000), or US Elite VIP ($6,500) for verified contact unlocks and dedicated matchmaking counselor assistance. For any assistance, email info@muslimbibah.com or support@muslimbibah.com.',
     },
   ];
+
+  const resolvedFaqs = initialFaqs && initialFaqs.length > 0
+    ? initialFaqs
+        .filter((f) => f.active !== false)
+        .map((f, i) => ({
+          q: f.q || f.question || `${i + 1}. FAQ`,
+          a: f.a || f.answer || '',
+        }))
+    : defaultFaqs;
+  const faqs = resolvedFaqs.length > 0 ? resolvedFaqs : defaultFaqs;
 
   return (
     <section
@@ -86,14 +108,14 @@ export function TrustSafetyFaq() {
                 100% ID Verified & Safe Matrimony Guarantee
               </div>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-body)', marginTop: 4, marginBottom: 0, lineHeight: 1.55 }}>
-                Your safety and modesty are our primary responsibility. Never transfer funds or share financial accounts with any matrimonial suitor. Report any suspicious activity immediately to <strong>support@marriagemediausa.com</strong>.
+                Your safety and modesty are our primary responsibility. Never transfer funds or share financial accounts with any matrimonial suitor. Report any suspicious activity immediately to <strong>support@muslimbibah.com</strong>.
               </p>
             </div>
           </div>
 
           <div>
             <a
-              href="mailto:support@marriagemediausa.com"
+              href="mailto:support@muslimbibah.com"
               className="btn-3d-crimson"
               style={{
                 padding: '10px 18px',
@@ -115,7 +137,7 @@ export function TrustSafetyFaq() {
         <div className="ornamental-header" style={{ marginBottom: 'var(--space-2xl)' }}>
           <div className="badge badge-emerald" style={{ marginBottom: 8 }}>
             <HelpCircle size={12} />
-            MarriageMediaUSA.com Official Help Center
+            MuslimBibah.com Official Help Center
           </div>
           <h2
             style={{

@@ -17,7 +17,7 @@ export interface SuitorFilterCriteria {
 /**
  * Halal Compatibility Scoring Algorithm (0 - 100%)
  * Enforces weighted categories per docs/02_SYSTEM_REQUIREMENTS_AND_SRS.md
- * and .agents/skills/marriagemediausa-domain-guardian/SKILL.md:
+ * and .agents/skills/muslimbibah-domain-guardian/SKILL.md:
  * - Age Alignment: 20 pts
  * - Islamic Practice & Modesty: 25 pts
  * - Location & US Diaspora Residency: 20 pts

@@ -10,8 +10,6 @@ import {
   AlertCircle,
   RefreshCw,
   Save,
-  ArrowUp,
-  ArrowDown,
   Sparkles,
   Coins,
   Eye,
@@ -20,7 +18,6 @@ import {
   X,
   Check,
 } from 'lucide-react';
-import { Package } from '@/db/repository';
 import {
   adminCreatePackageAction,
   adminUpdatePackageAction,
@@ -28,12 +25,6 @@ import {
   adminDeletePackageAction,
 } from '@/lib/admin/packageActions';
 import { broadcastSyncEvent, useCrossTabSync } from '@/lib/sync/broadcastSync';
-import {
-  saveFirestorePackage,
-  toggleFirestorePackage,
-  deleteFirestorePackage,
-  seedFirestoreInitialData,
-} from '@/lib/firebase/firestoreService';
 
 interface PricingPackagesTabProps {
   initialPackages: any[];
@@ -46,10 +37,10 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
   const [statusMsg, setStatusMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
   React.useEffect(() => {
-    fetch('/api/packages')
+    fetch('/api/packages?includeInactive=1', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
-        if (data.success && Array.isArray(data.packages) && data.packages.length > 0) {
+        if (data.success && Array.isArray(data.packages)) {
           setPkgList(data.packages);
         }
       })
@@ -71,41 +62,17 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
   ]);
   const [newFeatureText, setNewFeatureText] = useState('');
   const [saving, setSaving] = useState(false);
-  const [syncingFirestore, setSyncingFirestore] = useState(false);
-
-  // Sync All Packages to Firestore
-  const handleSyncAllToFirestore = async () => {
-    setSyncingFirestore(true);
-    try {
-      let count = 0;
-      for (const p of pkgList) {
-        await saveFirestorePackage({
-          id: `pkg_${p.id}`,
-          name: p.name,
-          priceUsd: Number(p.price_usd ?? p.priceUsd ?? 0),
-          durationMonths: Number(p.duration_months ?? p.durationMonths ?? 1),
-          contactCredits: Number(p.contact_credits ?? p.contactCredits ?? 0),
-          dailyProfileViewLimit: Number(p.daily_profile_view_limit ?? p.dailyProfileViewLimit ?? 10),
-          badgeTitle: p.badge_title ?? p.badgeTitle ?? 'Member',
-          features: Array.isArray(p.features) ? p.features : (p.featuresJson || []),
-          isActive: p.isActive !== false,
-        });
-        count++;
-      }
-      setStatusMsg({ text: `✓ Synchronized all ${count} packages to Cloud Firestore live!`, isError: false });
-      setTimeout(() => setStatusMsg(null), 3500);
-    } catch (err: any) {
-      setStatusMsg({ text: `Firestore sync error: ${err.message}`, isError: true });
-    } finally {
-      setSyncingFirestore(false);
-    }
+  const refreshPackages = async () => {
+    const res = await fetch('/api/packages?includeInactive=1', { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok || !data.success || !Array.isArray(data.packages)) throw new Error(data.error || 'Could not load packages from the database.');
+    setPkgList(data.packages);
   };
 
   // Cross-Tab Reactivity
   useCrossTabSync((msg) => {
     if (msg.type === 'PACKAGE_UPDATED') {
-      setStatusMsg({ text: '✓ Pricing synchronized instantly from another session', isError: false });
-      setTimeout(() => setStatusMsg(null), 3500);
+      refreshPackages().catch((error) => setStatusMsg({ text: error.message, isError: true }));
     }
   }, ['PACKAGE_UPDATED']);
 
@@ -183,21 +150,6 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
           );
           setStatusMsg({ text: `✓ Package "${name}" updated successfully!`, isError: false });
           broadcastSyncEvent('PACKAGE_UPDATED', { packageId: editingPkg.id, price: priceUsd });
-          try {
-            await saveFirestorePackage({
-              id: `pkg_${editingPkg.id}`,
-              name: res.package!.name,
-              priceUsd: parseFloat(res.package!.priceUsd),
-              durationMonths: res.package!.durationMonths,
-              contactCredits: res.package!.contactCredits,
-              dailyProfileViewLimit: res.package!.dailyProfileViewLimit,
-              badgeTitle: res.package!.badgeTitle || 'Member',
-              features: Array.isArray(res.package!.featuresJson) ? (res.package!.featuresJson as string[]) : [],
-              isActive: true,
-            });
-          } catch (fbErr) {
-            console.warn('Firestore update sync note:', fbErr);
-          }
         }
       } else {
         const res = await adminCreatePackageAction(null, formData);
@@ -223,21 +175,6 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
           ]);
           setStatusMsg({ text: `✓ New package "${name}" created successfully!`, isError: false });
           broadcastSyncEvent('PACKAGE_UPDATED', { price: priceUsd });
-          try {
-            await saveFirestorePackage({
-              id: `pkg_${res.package!.id}`,
-              name: res.package!.name,
-              priceUsd: parseFloat(res.package!.priceUsd),
-              durationMonths: res.package!.durationMonths,
-              contactCredits: res.package!.contactCredits,
-              dailyProfileViewLimit: res.package!.dailyProfileViewLimit,
-              badgeTitle: res.package!.badgeTitle || 'Member',
-              features: Array.isArray(res.package!.featuresJson) ? (res.package!.featuresJson as string[]) : [],
-              isActive: true,
-            });
-          } catch (fbErr) {
-            console.warn('Firestore create sync note:', fbErr);
-          }
         }
       }
 
@@ -250,28 +187,6 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
     }
   };
 
-  // Reorder Packages (Move Up)
-  const handleMoveUp = (index: number) => {
-    if (index === 0) return;
-    const newList = [...pkgList];
-    const temp = newList[index - 1];
-    newList[index - 1] = newList[index];
-    newList[index] = temp;
-    setPkgList(newList);
-    broadcastSyncEvent('PACKAGE_UPDATED');
-  };
-
-  // Reorder Packages (Move Down)
-  const handleMoveDown = (index: number) => {
-    if (index === pkgList.length - 1) return;
-    const newList = [...pkgList];
-    const temp = newList[index + 1];
-    newList[index + 1] = newList[index];
-    newList[index] = temp;
-    setPkgList(newList);
-    broadcastSyncEvent('PACKAGE_UPDATED');
-  };
-
   // Toggle Active
   const handleToggle = async (pkgId: number, currentStatus: boolean) => {
     const res = await adminTogglePackageAction(pkgId, !currentStatus);
@@ -280,11 +195,7 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
         prev.map((p) => (p.id === pkgId ? { ...p, isActive: !currentStatus } : p))
       );
       broadcastSyncEvent('PACKAGE_UPDATED', { packageId: pkgId });
-      try {
-        await toggleFirestorePackage(`pkg_${pkgId}`, !currentStatus);
-      } catch (fbErr) {
-        console.warn('Firestore toggle sync note:', fbErr);
-      }
+      await refreshPackages();
     }
   };
 
@@ -295,11 +206,7 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
     if (res.success) {
       setPkgList((prev) => prev.filter((p) => p.id !== pkgId));
       broadcastSyncEvent('PACKAGE_UPDATED', { packageId: pkgId });
-      try {
-        await deleteFirestorePackage(`pkg_${pkgId}`);
-      } catch (fbErr) {
-        console.warn('Firestore delete sync note:', fbErr);
-      }
+      await refreshPackages();
     }
   };
 
@@ -331,27 +238,6 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={handleSyncAllToFirestore}
-            disabled={syncingFirestore}
-            className="btn-3d-secondary"
-            style={{
-              fontSize: '0.825rem',
-              padding: '9px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              border: '1.5px solid #F59E0B',
-              background: '#FFFBEB',
-              color: '#B45309',
-              fontWeight: 800,
-            }}
-          >
-            <RefreshCw size={15} className={syncingFirestore ? 'animate-spin' : ''} />
-            {syncingFirestore ? 'Syncing to Cloud...' : 'Sync to Cloud Firestore'}
-          </button>
-
           <button
             type="button"
             onClick={openCreateModal}
@@ -418,7 +304,7 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
                 }}
               >
                 <div>
-                  {/* Top Bar with Reorder Arrows */}
+                  {/* Package Status */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span className="badge-3d" style={{ fontSize: '0.68rem', padding: '3px 8px' }}>
@@ -431,38 +317,6 @@ export function PricingPackagesTab({ initialPackages }: PricingPackagesTabProps)
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveUp(idx)}
-                        disabled={idx === 0}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 4,
-                          cursor: idx === 0 ? 'default' : 'pointer',
-                          opacity: idx === 0 ? 0.2 : 0.8,
-                        }}
-                        title="Move Up"
-                      >
-                        <ArrowUp size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveDown(idx)}
-                        disabled={idx === pkgList.length - 1}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 4,
-                          cursor: idx === pkgList.length - 1 ? 'default' : 'pointer',
-                          opacity: idx === pkgList.length - 1 ? 0.2 : 0.8,
-                        }}
-                        title="Move Down"
-                      >
-                        <ArrowDown size={14} />
-                      </button>
-                    </div>
                   </div>
 
                   <h3 style={{ margin: '0 0 6px 0', fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>

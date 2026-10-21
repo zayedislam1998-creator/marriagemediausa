@@ -10,10 +10,18 @@ import {
   paymentGatewaysConfig,
   paymentTransactions,
   walletLedger,
+  contactSubmissions,
+  cmsArticles,
+  successStories,
+  cmsPageSections,
+  auditLogs,
 } from './schema';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, sql, ilike, gte, lte, or } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import domainSeed from '../../seed-data/marriagemediausa_domain_seed.json';
+import crypto from 'crypto';
+import domainSeed from '../../seed-data/muslimbibah_domain_seed.json';
+import { decryptCredential, encryptCredential } from '@/lib/payments/credentialEncryption';
+import { AuthenticProfile } from './repository';
 
 export interface AdminMemberRecord {
   userId: string;
@@ -74,6 +82,7 @@ export interface AdminMemberRecord {
     cvUrl?: string | null;
   };
   subscription?: {
+    packageId: number;
     packageName: string;
     contactCreditsRemaining: number;
     status: string;
@@ -96,7 +105,14 @@ export async function getAllMembersForAdmin(): Promise<AdminMemberRecord[]> {
       .leftJoin(packages, eq(userSubscriptions.packageId, packages.id));
 
     const profileMap = new Map(dbProfiles.map((p) => [p.userId, p]));
-    const subMap = new Map(dbSubs.map((s) => [s.sub.userId, s]));
+    const now = new Date();
+    const subMap = new Map<string, (typeof dbSubs)[number]>();
+    for (const row of dbSubs) {
+      if (row.sub.status === 'ACTIVE' && row.sub.expiresAt > now) {
+        const current = subMap.get(row.sub.userId);
+        if (!current || row.sub.startedAt > current.sub.startedAt) subMap.set(row.sub.userId, row);
+      }
+    }
 
     return dbUsers.map((u) => {
       const p = profileMap.get(u.id);
@@ -164,20 +180,17 @@ export async function getAllMembersForAdmin(): Promise<AdminMemberRecord[]> {
           : undefined,
         subscription: s?.pkg
           ? {
+              packageId: s.pkg.id,
               packageName: s.pkg.name,
               contactCreditsRemaining: s.sub.contactCreditsRemaining,
               status: s.sub.status,
             }
-          : {
-              packageName: 'Free Explorer',
-              contactCreditsRemaining: 0,
-              status: 'ACTIVE',
-            },
+          : undefined,
       };
     });
   } catch (error) {
-    console.error('Error fetching members from DB, falling back:', error);
-    return [];
+    console.error('Error fetching members from DB:', error);
+    throw error;
   }
 }
 
@@ -219,7 +232,7 @@ export async function getAllPackagesFromDb() {
     }));
   } catch (error) {
     console.error('Error fetching packages from DB:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -318,6 +331,11 @@ export async function togglePackageActiveInDb(id: number, isActive: boolean) {
  */
 export async function deletePackageInDb(id: number) {
   try {
+    const [referencedSubscription] = await db.select({ id: userSubscriptions.id })
+      .from(userSubscriptions).where(eq(userSubscriptions.packageId, id)).limit(1);
+    if (referencedSubscription) {
+      throw new Error('This package is part of membership history and cannot be deleted. Deactivate it instead.');
+    }
     await db.delete(packages).where(eq(packages.id, id));
     return true;
   } catch (error) {
@@ -504,12 +522,12 @@ export async function updateMemberProfileInDb(
 
 export interface ProvisionMemberInput {
   email: string;
-  password: string;
+  password?: string;
   phoneNumber: string;
   fullName: string;
   gender: 'MALE' | 'FEMALE';
   dateOfBirth: string;
-  maritalStatus?: 'NEVER_MARRIED' | 'DIVORCED' | 'WIDOWED' | 'SEPARATED';
+  maritalStatus?: 'NEVER_MARRIED' | 'DIVORCED' | 'WIDOWED' | 'SEPARATED' | 'OTHER';
   countryLivingIn?: string;
   stateProvince?: string;
   city?: string;
@@ -518,40 +536,55 @@ export interface ProvisionMemberInput {
   guardianName?: string;
   guardianRelation?: string;
   guardianPhone?: string;
-  tier?: 'FREE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'ELITE';
+  packageId: number;
+  sendInviteLink?: boolean;
 }
 
 export async function provisionMemberInDb(input: ProvisionMemberInput) {
   try {
-    // 1. Hash password with bcryptjs
-    const passwordHash = await bcrypt.hash(input.password, 10);
+    const email = input.email.trim().toLowerCase();
+    const phoneDigits = input.phoneNumber.replace(/\D/g, '');
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) throw new Error('Enter a valid phone number.');
+    const phoneNumber = `+${phoneDigits}`;
 
-    // 2. Insert into users table
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        email: input.email.toLowerCase().trim(),
-        phoneNumber: input.phoneNumber.trim(),
+    // Generate secure single-use 30-day invite setup token
+    const inviteToken = crypto.randomBytes(24).toString('hex');
+    const inviteExpiresAt = new Date();
+    inviteExpiresAt.setDate(inviteExpiresAt.getDate() + 30); // 30-day expiry window
+
+    const rawPassword = input.password && !input.sendInviteLink
+      ? input.password
+      : `Tmp!${crypto.randomBytes(16).toString('hex')}`;
+    const passwordHash = await bcrypt.hash(rawPassword, 10);
+
+    const birthDate = new Date(`${input.dateOfBirth}T00:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dateOfBirth) || Number.isNaN(birthDate.getTime()) || birthDate.toISOString().slice(0, 10) !== input.dateOfBirth || birthDate >= new Date()) {
+      throw new Error('Enter a valid date of birth.');
+    }
+    const today = new Date();
+    const age = today.getUTCFullYear() - birthDate.getUTCFullYear() -
+      (today.getUTCMonth() < birthDate.getUTCMonth() || (today.getUTCMonth() === birthDate.getUTCMonth() && today.getUTCDate() < birthDate.getUTCDate()) ? 1 : 0);
+    if (age < 18) throw new Error('Members must be at least 18 years old.');
+
+    const created = await db.transaction(async (tx) => {
+      const duplicate = await tx.execute(sql`select id from users where lower(email) = ${email} or regexp_replace(phone_number, '[^0-9]', '', 'g') = ${phoneDigits} limit 1`);
+      if (duplicate.length) throw new Error('An account with this email or phone number already exists.');
+      const [matchedPkg] = await tx.select().from(packages).where(and(eq(packages.id, input.packageId), eq(packages.isActive, true))).limit(1);
+      if (!matchedPkg) throw new Error('The selected package is unavailable. Refresh packages and try again.');
+      const [newUser] = await tx.insert(users).values({
+        email,
+        phoneNumber,
         passwordHash,
+        inviteToken,
+        inviteExpiresAt,
         role: 'MEMBER',
         isActive: true,
-        isVerified: true,
-      })
-      .returning();
+        isVerified: false,
+      }).returning();
+      if (!newUser) throw new Error('The member account could not be created.');
 
-    // 3. Compute age from DOB
-    const birthDate = new Date(input.dateOfBirth);
-    const ageDiffMs = Date.now() - birthDate.getTime();
-    const ageDate = new Date(ageDiffMs);
-    const age = Math.abs(ageDate.getUTCFullYear() - 1970);
-
-    // 4. Generate unique profile ID (e.g. '2026' + 6 random digits)
-    const profileId = `2026${Math.floor(100000 + Math.random() * 900000)}`;
-
-    // 5. Insert into profiles table
-    const [newProfile] = await db
-      .insert(profiles)
-      .values({
+      const profileId = `MB${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
+      const [newProfile] = await tx.insert(profiles).values({
         userId: newUser.id,
         profileId,
         createdBy: 'Admin Direct Provisioning',
@@ -560,57 +593,81 @@ export async function provisionMemberInDb(input: ProvisionMemberInput) {
         fullName: input.fullName.trim(),
         gender: input.gender,
         dateOfBirth: input.dateOfBirth,
-        age: age || 25,
-        heightFeetInches: input.gender === 'MALE' ? `5' 10"` : `5' 4"`,
-        heightCm: input.gender === 'MALE' ? 178 : 163,
-        maritalStatus: input.maritalStatus || 'NEVER_MARRIED',
-        countryLivingIn: input.countryLivingIn || 'United States (USA)',
-        stateProvince: input.stateProvince || 'New York',
-        city: input.city || 'New York',
-        zipCode: '10001',
-        educationLevel: input.educationLevel || "Bachelor's Degree",
-        profession: input.profession || 'Software Professional',
-        guardianName: input.guardianName || (input.gender === 'FEMALE' ? 'Verified Guardian' : 'Self/Family'),
-        guardianRelation: input.guardianRelation || (input.gender === 'FEMALE' ? 'Father' : 'Self'),
-        guardianPhone: input.guardianPhone || input.phoneNumber,
-        guardianVerified: true,
-        aboutMe: `Practicing Muslim dedicated to faith, character, and Sunnah marriage. Seeking a righteous life partner to build an Islamic household.`,
-        whatIAmLookingFor: `Looking for a practicing, family-oriented partner with good moral character, mutual respect, and dedication to Deen.`,
-        completionPercentage: 85,
-        isApproved: true,
+        age,
+        heightFeetInches: 'Not provided',
+        heightCm: 0,
+        maritalStatus: input.maritalStatus || 'OTHER',
+        haveChildren: null,
+        childLivingStatus: null,
+        familyValues: null,
+        fatherStatus: null,
+        motherStatus: null,
+        brothersCount: null,
+        sistersCount: null,
+        siblingPosition: null,
+        bodyType: null,
+        complexion: null,
+        eyesColor: null,
+        hairColor: null,
+        disability: null,
+        eyeWear: null,
+        religion: 'Not provided',
+        sectMazhab: null,
+        religiousness: null,
+        prayFrequency: null,
+        halalDiet: null,
+        smoke: null,
+        drink: null,
+        wearsHijabOrBeard: null,
+        motherTongue: 'Not provided',
+        countryLivingIn: input.countryLivingIn || '',
+        stateProvince: input.stateProvince || '',
+        city: input.city || '',
+        zipCode: '',
+        educationLevel: input.educationLevel || 'Not provided',
+        profession: input.profession || 'Not provided',
+        nationality: 'Not provided',
+        residingStatus: 'OTHERS',
+        guardianPhoneCountryCode: null,
+        guardianName: input.guardianName || '',
+        guardianRelation: input.guardianRelation || '',
+        guardianPhone: input.guardianPhone || '',
+        guardianVerified: false,
+        aboutMe: '',
+        whatIAmLookingFor: '',
+        photoPrivacy: 'HIDDEN',
+        completionPercentage: 0,
+        isApproved: false,
         isFeatured: false,
-      })
-      .returning();
+        kycStatus: 'NOT_SUBMITTED',
+      }).returning();
+      if (!newProfile) throw new Error('The member profile could not be created.');
 
-    // 6. Find package matching chosen tier or default to 1 (Free)
-    const tierName = input.tier || 'FREE';
-    const allPkgs = await db.select().from(packages);
-    const matchedPkg = allPkgs.find((p) => p.name.toUpperCase().includes(tierName)) || allPkgs[0];
-
-    if (matchedPkg) {
-      const expires = new Date();
-      expires.setMonth(expires.getMonth() + matchedPkg.durationMonths);
-
-      await db.insert(userSubscriptions).values({
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + matchedPkg.durationMonths);
+      await tx.insert(userSubscriptions).values({
         userId: newUser.id,
         packageId: matchedPkg.id,
         status: 'ACTIVE',
-        pricePaidUsd: matchedPkg.priceUsd,
+        pricePaidUsd: '0.00',
         contactCreditsRemaining: matchedPkg.contactCredits,
-        expiresAt: expires,
-        paymentReference: `ADMIN_PROVISION_${Date.now()}`,
+        expiresAt,
+        paymentReference: `ADMIN_GRANT:${newUser.id}`,
       });
-    }
 
-    return {
-      success: true,
-      user: newUser,
-      profile: newProfile,
-    };
+      return {
+        user: newUser,
+        profile: newProfile,
+        packageName: matchedPkg.name,
+        inviteToken,
+        inviteUrl: `/setup-password?token=${inviteToken}`,
+      };
+    });
+    return { success: true as const, ...created };
   } catch (error: any) {
     console.error('Error provisioning member in DB:', error);
     return {
-      success: false,
+      success: false as const,
       error: error.message || 'Failed to provision member',
     };
   }
@@ -717,47 +774,27 @@ export async function saveFormBuilderConfigInDb(
   }
 }
 
-export async function assignUserSubscriptionTierInDb(userId: string, tierName: string) {
+export async function assignUserSubscriptionTierInDb(userId: string, packageId: number) {
   try {
-    const allPkgs = await db.select().from(packages);
-    let matchedPkg = allPkgs.find((p) => p.name.toLowerCase().includes(tierName.toLowerCase()));
-    if (!matchedPkg && allPkgs.length > 0) {
-      matchedPkg = allPkgs[0];
-    }
-    const credits = matchedPkg ? matchedPkg.contactCredits : 25;
-    const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + (matchedPkg?.durationMonths || 6));
-
-    const [existing] = await db
-      .select()
-      .from(userSubscriptions)
-      .where(eq(userSubscriptions.userId, userId));
-
-    if (existing && matchedPkg) {
-      await db
-        .update(userSubscriptions)
-        .set({
-          packageId: matchedPkg.id,
-          status: 'ACTIVE',
-          contactCreditsRemaining: credits,
-          expiresAt,
-        })
-        .where(eq(userSubscriptions.id, existing.id));
-    } else if (matchedPkg) {
-      await db.insert(userSubscriptions).values({
-        userId,
-        packageId: matchedPkg.id,
-        status: 'ACTIVE',
-        pricePaidUsd: matchedPkg.priceUsd,
-        contactCreditsRemaining: credits,
-        expiresAt,
+    return await db.transaction(async (tx) => {
+      const [targetUser] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update').limit(1);
+      if (!targetUser) throw new Error('Member account not found.');
+      const [matchedPkg] = await tx.select().from(packages).where(and(eq(packages.id, packageId), eq(packages.isActive, true))).limit(1);
+      if (!matchedPkg) throw new Error('The selected package is unavailable.');
+      const now = new Date();
+      await tx.update(userSubscriptions).set({ status: 'EXPIRED' }).where(and(eq(userSubscriptions.userId, userId), eq(userSubscriptions.status, 'ACTIVE')));
+      const expiresAt = new Date(now);
+      expiresAt.setMonth(expiresAt.getMonth() + matchedPkg.durationMonths);
+      await tx.insert(userSubscriptions).values({
+        userId, packageId: matchedPkg.id, status: 'ACTIVE', pricePaidUsd: '0.00',
+        contactCreditsRemaining: matchedPkg.contactCredits, startedAt: now, expiresAt,
+        paymentReference: `ADMIN_GRANT:${userId}:${now.getTime()}`,
       });
-    }
-
-    return { success: true, packageName: matchedPkg?.name || tierName };
+      return { success: true, packageName: matchedPkg.name };
+    });
   } catch (error) {
     console.error('Error assigning user subscription in DB:', error);
-    return { success: false, error: 'Database update failed' };
+    return { success: false, error: error instanceof Error ? error.message : 'Database update failed' };
   }
 }
 
@@ -774,17 +811,8 @@ export async function getAllGatewayConfigsFromDb() {
       const publicKey = r.publicKey || '';
 
       const isPlaceholder = secretKey.includes('placeholder');
-      const maskedSecret = isPlaceholder
-        ? ''
-        : secretKey.length > 8
-        ? `${secretKey.slice(0, 7)}••••••••${secretKey.slice(-4)}`
-        : '••••••••';
-
-      const maskedWebhook = webhookSecret.includes('placeholder')
-        ? ''
-        : webhookSecret.length > 8
-        ? `${webhookSecret.slice(0, 6)}••••••••${webhookSecret.slice(-4)}`
-        : '••••••••';
+      const maskedSecret = isPlaceholder ? '' : secretKey ? '••••••••' : '';
+      const maskedWebhook = webhookSecret.includes('placeholder') ? '' : webhookSecret ? '••••••••' : '';
 
       return {
         id: r.id,
@@ -793,9 +821,9 @@ export async function getAllGatewayConfigsFromDb() {
         isActive: r.isActive,
         publicKey: publicKey.includes('placeholder') ? '' : publicKey,
         secretKeyMasked: maskedSecret,
-        secretKeyRaw: isPlaceholder ? '' : secretKey,
+        hasSecretKey: Boolean(secretKey && !isPlaceholder),
         webhookSecretMasked: maskedWebhook,
-        webhookSecretRaw: webhookSecret.includes('placeholder') ? '' : webhookSecret,
+        hasWebhookSecret: Boolean(webhookSecret && !webhookSecret.includes('placeholder')),
         webhookId: r.webhookId || '',
         settingsJson: (r.settingsJson as Record<string, any>) || {},
         lastTestedAt: r.lastTestedAt,
@@ -818,9 +846,9 @@ export async function getGatewayConfigFromDb(gateway: 'STRIPE' | 'PAYPAL') {
 
     if (!record) return null;
 
-    let secretKey = record.encryptedSecretKey;
+    let secretKey = decryptCredential(record.encryptedSecretKey);
     let publicKey = record.publicKey;
-    let webhookSecret = record.encryptedWebhookSecret;
+    let webhookSecret = decryptCredential(record.encryptedWebhookSecret);
 
     if (gateway === 'STRIPE') {
       if ((!secretKey || secretKey.includes('placeholder')) && process.env.STRIPE_SECRET_KEY) {
@@ -873,18 +901,30 @@ export async function saveGatewayConfigInDb(
   }
 ) {
   try {
+    const [current] = await db.select().from(paymentGatewaysConfig).where(eq(paymentGatewaysConfig.gateway, gateway)).limit(1);
+    if (!current) throw new Error(`${gateway} configuration row is missing; run database initialization first.`);
+    const currentSecret = decryptCredential(current.encryptedSecretKey);
+    const currentWebhookSecret = decryptCredential(current.encryptedWebhookSecret);
+    const credentialsChanged = (Boolean(data.secretKey) && data.secretKey !== currentSecret) ||
+      (data.publicKey !== current.publicKey) || (data.mode !== current.mode) ||
+      (data.webhookSecret !== undefined && data.webhookSecret !== '' && data.webhookSecret !== currentWebhookSecret);
+    const hasRequiredKeys = gateway === 'STRIPE'
+      ? Boolean(data.secretKey || currentSecret) && Boolean(data.publicKey || current.publicKey) && Boolean(data.webhookSecret || currentWebhookSecret)
+      : Boolean(data.secretKey || currentSecret) && Boolean(data.publicKey || current.publicKey);
     const updateData: Record<string, any> = {
       mode: data.mode,
-      isActive: data.isActive,
+      isActive: data.isActive && !credentialsChanged && hasRequiredKeys && current.testStatus === 'SUCCESS',
       publicKey: data.publicKey,
+      testStatus: credentialsChanged ? 'UNTESTED' : current.testStatus,
+      lastTestMessage: credentialsChanged ? 'Credentials or mode changed; run a fresh connection test before activation.' : current.lastTestMessage,
       updatedAt: new Date(),
     };
 
     if (data.secretKey) {
-      updateData.encryptedSecretKey = data.secretKey;
+      updateData.encryptedSecretKey = encryptCredential(data.secretKey);
     }
-    if (data.webhookSecret !== undefined) {
-      updateData.encryptedWebhookSecret = data.webhookSecret;
+    if (data.webhookSecret) {
+      updateData.encryptedWebhookSecret = encryptCredential(data.webhookSecret);
     }
     if (data.webhookId !== undefined) {
       updateData.webhookId = data.webhookId;
@@ -925,5 +965,815 @@ export async function updateGatewayTestStatusInDb(
     console.error('Failed to update gateway test status in DB:', e);
   }
 }
+
+// ============================================================================
+// PUBLIC PROFILES QUERIES (CANONICAL POSTGRESQL TRUTH)
+// ============================================================================
+
+export function mapDbProfileToAuthentic(
+  p: typeof profiles.$inferSelect,
+  packageName?: string | null
+): AuthenticProfile {
+  return {
+    profile_id: p.profileId,
+    full_name: p.fullName,
+    nick_name: p.nickName || undefined,
+    gender: p.gender,
+    date_of_birth: p.dateOfBirth,
+    age: p.age,
+    looking_for: p.lookingFor,
+    marital_status: p.maritalStatus,
+    have_children: p.haveChildren || 'No',
+    child_living_status: p.childLivingStatus || 'No Child',
+    family_values: p.familyValues || 'Religious',
+    father_status: p.fatherStatus || 'Employed',
+    mother_status: p.motherStatus || 'Homemaker',
+    brothers_count: p.brothersCount || '0',
+    sisters_count: p.sistersCount || '0',
+    sibling_position: p.siblingPosition || '1',
+    height_feet_inches: p.heightFeetInches,
+    height_cm: p.heightCm,
+    weight_kg: p.weightKg || 0,
+    body_type: p.bodyType || 'AVERAGE',
+    complexion: p.complexion || 'FAIR',
+    eyes_color: p.eyesColor || 'Black',
+    hair_color: p.hairColor || 'Black',
+    blood_group: p.bloodGroup || '',
+    disability: p.disability || 'None',
+    eye_wear: p.eyeWear || 'None',
+    religion: p.religion,
+    sect_mazhab: p.sectMazhab || 'Sunni / Hanafi',
+    religiousness: p.religiousness || 'RELIGIOUS',
+    pray_frequency: p.prayFrequency || 'ALWAYS',
+    halal_diet: p.halalDiet || 'STRICTLY_HALAL',
+    smoke: p.smoke || 'NO',
+    drink: p.drink || 'NO',
+    wears_hijab_or_beard: Boolean(p.wearsHijabOrBeard),
+    mother_tongue: p.motherTongue,
+    education_level: p.educationLevel,
+    institution_name: p.institutionName || '',
+    field_of_study: p.fieldOfStudy || '',
+    profession: p.profession,
+    designation: p.designation || '',
+    employer_name: p.employerName || '',
+    experience_years: p.experienceYears || '',
+    annual_income: p.annualIncome || '',
+    nationality: p.nationality,
+    country_living_in: p.countryLivingIn,
+    state_province: p.stateProvince,
+    city: p.city,
+    zip_code: p.zipCode || '',
+    residing_status: p.residingStatus || 'Citizen',
+    guardian_name: p.guardianName || '',
+    guardian_relation: p.guardianRelation || '',
+    guardian_phone_country_code: p.guardianPhoneCountryCode || '+1',
+    guardian_phone: p.guardianPhone || '',
+    guardian_verified: Boolean(p.guardianVerified),
+    about_me: p.aboutMe || '',
+    what_i_am_looking_for: p.whatIAmLookingFor || '',
+    photo_privacy: (p.photoPrivacy as any) || 'PUBLIC',
+    completion_percentage: p.completionPercentage || 85,
+    is_featured: Boolean(p.isFeatured),
+    kyc_status: p.kycStatus || 'APPROVED',
+    is_approved: Boolean(p.isApproved),
+    package_name: packageName || 'Member',
+    photo_url: p.coverPhotoUrl || `/uploads/avatars/${p.profileId}.webp`,
+  };
+}
+
+export interface ProfileDbFilters {
+  gender?: 'MALE' | 'FEMALE';
+  country?: string;
+  state?: string;
+  city?: string;
+  minAge?: number;
+  maxAge?: number;
+  profession?: string;
+  educationLevel?: string;
+  maritalStatus?: string;
+  sectMazhab?: string;
+  residingStatus?: string;
+  query?: string;
+}
+
+export async function getPublicProfilesFromDb(filters?: ProfileDbFilters): Promise<AuthenticProfile[]> {
+  try {
+    const conditions = [
+      eq(users.isActive, true),
+      eq(profiles.isApproved, true),
+    ];
+
+    if (filters?.gender) {
+      conditions.push(eq(profiles.gender, filters.gender));
+    }
+    if (filters?.minAge) {
+      conditions.push(gte(profiles.age, filters.minAge));
+    }
+    if (filters?.maxAge) {
+      conditions.push(lte(profiles.age, filters.maxAge));
+    }
+    if (filters?.country && filters.country !== 'All' && filters.country !== "Doesn't Matter") {
+      conditions.push(ilike(profiles.countryLivingIn, `%${filters.country}%`));
+    }
+    if (filters?.state && filters.state !== 'All' && filters.state !== "Doesn't Matter") {
+      conditions.push(ilike(profiles.stateProvince, `%${filters.state}%`));
+    }
+    if (filters?.profession && filters.profession !== 'All') {
+      conditions.push(ilike(profiles.profession, `%${filters.profession}%`));
+    }
+    if (filters?.educationLevel && filters.educationLevel !== 'All') {
+      conditions.push(ilike(profiles.educationLevel, `%${filters.educationLevel}%`));
+    }
+    if (filters?.maritalStatus && filters.maritalStatus !== 'All' && filters.maritalStatus !== "Doesn't Matter") {
+      conditions.push(eq(profiles.maritalStatus, filters.maritalStatus as any));
+    }
+    if (filters?.sectMazhab && filters.sectMazhab !== 'All') {
+      conditions.push(ilike(profiles.sectMazhab, `%${filters.sectMazhab}%`));
+    }
+    if (filters?.query) {
+      const q = filters.query.trim();
+      if (q) {
+        conditions.push(
+          or(
+            ilike(profiles.fullName, `%${q}%`),
+            ilike(profiles.city, `%${q}%`),
+            ilike(profiles.profession, `%${q}%`),
+            ilike(profiles.aboutMe, `%${q}%`),
+            ilike(profiles.profileId, `%${q}%`)
+          )!
+        );
+      }
+    }
+
+    const rows = await db
+      .select({
+        profile: profiles,
+        user: users,
+        sub: userSubscriptions,
+        pkg: packages,
+      })
+      .from(profiles)
+      .innerJoin(users, eq(profiles.userId, users.id))
+      .leftJoin(userSubscriptions, and(eq(userSubscriptions.userId, users.id), eq(userSubscriptions.status, 'ACTIVE')))
+      .leftJoin(packages, eq(userSubscriptions.packageId, packages.id))
+      .where(and(...conditions))
+      .orderBy(desc(profiles.isFeatured), desc(profiles.createdAt));
+
+    return rows.map((r) => mapDbProfileToAuthentic(r.profile, r.pkg?.name));
+  } catch (error) {
+    console.error('Error in getPublicProfilesFromDb:', error);
+    return [];
+  }
+}
+
+export async function getPublicProfileByIdFromDb(profileIdOrId: string): Promise<AuthenticProfile | null> {
+  try {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileIdOrId);
+    const condition = isUuid
+      ? or(eq(profiles.profileId, profileIdOrId), eq(profiles.id, profileIdOrId))
+      : eq(profiles.profileId, profileIdOrId);
+
+    const [row] = await db
+      .select({
+        profile: profiles,
+        user: users,
+        pkg: packages,
+      })
+      .from(profiles)
+      .innerJoin(users, eq(profiles.userId, users.id))
+      .leftJoin(userSubscriptions, and(eq(userSubscriptions.userId, users.id), eq(userSubscriptions.status, 'ACTIVE')))
+      .leftJoin(packages, eq(userSubscriptions.packageId, packages.id))
+      .where(and(condition, eq(users.isActive, true)))
+      .limit(1);
+
+    if (!row) return null;
+    return mapDbProfileToAuthentic(row.profile, row.pkg?.name);
+  } catch (error) {
+    console.error('Error in getPublicProfileByIdFromDb:', error);
+    return null;
+  }
+}
+
+// ============================================================================
+// DURABLE CONTACT SUBMISSIONS & INBOX
+// ============================================================================
+
+export interface CreateContactSubmissionInput {
+  type?: 'CONTACT' | 'WEDDING_SERVICE' | 'GENERAL';
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  subject?: string;
+  cityState?: string;
+  serviceType?: string;
+  message: string;
+}
+
+export async function submitContactInquiryInDb(input: CreateContactSubmissionInput) {
+  try {
+    const [created] = await db
+      .insert(contactSubmissions)
+      .values({
+        type: input.type || 'CONTACT',
+        fullName: input.fullName.trim(),
+        email: input.email.trim().toLowerCase(),
+        phoneNumber: input.phoneNumber.trim(),
+        subject: input.subject || null,
+        cityState: input.cityState || null,
+        serviceType: input.serviceType || null,
+        message: input.message.trim(),
+        status: 'NEW',
+      })
+      .returning();
+
+    return { success: true, submission: created };
+  } catch (error: any) {
+    console.error('Error saving contact submission in DB:', error);
+    return { success: false, error: error.message || 'Failed to record submission' };
+  }
+}
+
+export async function getContactSubmissionsForAdmin() {
+  try {
+    return await db.select().from(contactSubmissions).orderBy(desc(contactSubmissions.createdAt));
+  } catch (error) {
+    console.error('Error fetching contact submissions for admin:', error);
+    return [];
+  }
+}
+
+export async function updateContactSubmissionStatusInDb(
+  id: string,
+  status: 'NEW' | 'IN_REVIEW' | 'CONTACTED' | 'RESOLVED',
+  adminNotes?: string
+) {
+  try {
+    const updateObj: Record<string, any> = { status, updatedAt: new Date() };
+    if (adminNotes !== undefined) updateObj.adminNotes = adminNotes;
+    const [updated] = await db
+      .update(contactSubmissions)
+      .set(updateObj)
+      .where(eq(contactSubmissions.id, id))
+      .returning();
+    return { success: true, submission: updated };
+  } catch (error: any) {
+    console.error('Error updating contact submission status in DB:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
+// SUCCESS STORIES & CMS ARTICLES
+// ============================================================================
+
+export async function getSuccessStoriesFromDb() {
+  try {
+    return await db
+      .select()
+      .from(successStories)
+      .where(eq(successStories.isPublished, true))
+      .orderBy(desc(successStories.createdAt));
+  } catch (error) {
+    console.error('Error fetching success stories from DB:', error);
+    return [];
+  }
+}
+
+export async function submitSuccessStoryInDb(data: {
+  title: string;
+  coupleNames: string;
+  weddingDate?: string;
+  imageUrl?: string;
+  storyBody: string;
+  isPublished?: boolean;
+}) {
+  try {
+    const [created] = await db
+      .insert(successStories)
+      .values({
+        title: data.title.trim(),
+        coupleNames: data.coupleNames.trim(),
+        weddingDate: data.weddingDate || null,
+        imageUrl: data.imageUrl || null,
+        storyBody: data.storyBody.trim(),
+        isPublished: data.isPublished !== undefined ? data.isPublished : false, // Needs admin approval by default
+      })
+      .returning();
+    return { success: true, story: created };
+  } catch (error: any) {
+    console.error('Error submitting success story in DB:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getCmsArticlesFromDb(includeDrafts = false) {
+  try {
+    if (includeDrafts) {
+      return await db.select().from(cmsArticles).orderBy(desc(cmsArticles.publishedAt));
+    }
+    return await db
+      .select()
+      .from(cmsArticles)
+      .where(eq(cmsArticles.isPublished, true))
+      .orderBy(desc(cmsArticles.publishedAt));
+  } catch (error) {
+    console.error('Error fetching CMS articles from DB:', error);
+    return [];
+  }
+}
+
+export async function saveCmsArticleInDb(article: {
+  title: string;
+  slug: string;
+  category: string;
+  author?: string;
+  excerpt: string;
+  content: string;
+  isPublished?: boolean;
+  isFeatured?: boolean;
+}) {
+  try {
+    const [saved] = await db
+      .insert(cmsArticles)
+      .values({
+        title: article.title.trim(),
+        slug: article.slug.trim().toLowerCase(),
+        category: article.category.trim(),
+        author: article.author?.trim() || 'Editorial Board',
+        excerpt: article.excerpt.trim(),
+        content: article.content.trim(),
+        isPublished: article.isPublished !== undefined ? article.isPublished : true,
+        isFeatured: article.isFeatured !== undefined ? article.isFeatured : false,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: cmsArticles.slug,
+        set: {
+          title: article.title.trim(),
+          category: article.category.trim(),
+          author: article.author?.trim() || 'Editorial Board',
+          excerpt: article.excerpt.trim(),
+          content: article.content.trim(),
+          isPublished: article.isPublished !== undefined ? article.isPublished : true,
+          isFeatured: article.isFeatured !== undefined ? article.isFeatured : false,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return { success: true, article: saved };
+  } catch (error: any) {
+    console.error('Error saving CMS article in DB:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getAllCmsStoriesFromDb(includeUnpublished = true) {
+  try {
+    if (includeUnpublished) {
+      return await db.select().from(successStories).orderBy(desc(successStories.createdAt));
+    }
+    return await db
+      .select()
+      .from(successStories)
+      .where(eq(successStories.isPublished, true))
+      .orderBy(desc(successStories.createdAt));
+  } catch (error) {
+    console.error('Error fetching CMS stories from DB:', error);
+    return [];
+  }
+}
+
+export async function toggleCmsStoryPublishInDb(id: number, isPublished: boolean) {
+  try {
+    const [updated] = await db
+      .update(successStories)
+      .set({ isPublished })
+      .where(eq(successStories.id, id))
+      .returning();
+    return { success: true, story: updated };
+  } catch (error: any) {
+    console.error('Error toggling CMS story in DB:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function deleteCmsStoryInDb(id: number) {
+  try {
+    await db.delete(successStories).where(eq(successStories.id, id));
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting CMS story from DB:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function toggleCmsArticlePublishInDb(id: number, isPublished: boolean) {
+  try {
+    const [updated] = await db
+      .update(cmsArticles)
+      .set({ isPublished, updatedAt: new Date() })
+      .where(eq(cmsArticles.id, id))
+      .returning();
+    return { success: true, article: updated };
+  } catch (error: any) {
+    console.error('Error toggling CMS article publish in DB:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function deleteCmsArticleInDb(id: number) {
+  try {
+    await db.delete(cmsArticles).where(eq(cmsArticles.id, id));
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting CMS article from DB:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getCmsPageSectionFromDb(pageKey: string, sectionKey: string, onlyPublished = true) {
+  try {
+    const conditions = [
+      eq(cmsPageSections.pageKey, pageKey),
+      eq(cmsPageSections.sectionKey, sectionKey),
+    ];
+    if (onlyPublished) {
+      conditions.push(eq(cmsPageSections.isPublished, true));
+    }
+    const [section] = await db
+      .select()
+      .from(cmsPageSections)
+      .where(and(...conditions))
+      .limit(1);
+    return section || null;
+  } catch (error) {
+    console.error(`Error fetching CMS page section (${pageKey}/${sectionKey}):`, error);
+    return null;
+  }
+}
+
+export async function getAllCmsPageSectionsFromDb(pageKey?: string) {
+  try {
+    if (pageKey) {
+      return await db
+        .select()
+        .from(cmsPageSections)
+        .where(eq(cmsPageSections.pageKey, pageKey))
+        .orderBy(desc(cmsPageSections.updatedAt));
+    }
+    return await db.select().from(cmsPageSections).orderBy(desc(cmsPageSections.updatedAt));
+  } catch (error) {
+    console.error('Error fetching all CMS page sections:', error);
+    return [];
+  }
+}
+
+export async function saveCmsPageSectionInDb(data: {
+  pageKey: string;
+  sectionKey: string;
+  title?: string;
+  contentJson: any;
+  isPublished?: boolean;
+  userId?: string;
+}) {
+  try {
+    const [saved] = await db
+      .insert(cmsPageSections)
+      .values({
+        pageKey: data.pageKey.trim().toLowerCase(),
+        sectionKey: data.sectionKey.trim().toLowerCase(),
+        title: data.title?.trim() || null,
+        contentJson: data.contentJson,
+        isPublished: data.isPublished !== undefined ? data.isPublished : true,
+        updatedBy: data.userId || null,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [cmsPageSections.pageKey, cmsPageSections.sectionKey],
+        set: {
+          title: data.title?.trim() || null,
+          contentJson: data.contentJson,
+          isPublished: data.isPublished !== undefined ? data.isPublished : true,
+          updatedBy: data.userId || null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return { success: true, section: saved };
+  } catch (error: any) {
+    console.error('Error saving CMS page section in DB:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================================
+// ADMIN BULK MEMBER IMPORT & INVITE PASSWORD SETUP
+// ============================================================================
+
+export interface BulkImportMemberInput {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  gender: 'MALE' | 'FEMALE';
+  dateOfBirth: string; // YYYY-MM-DD
+  countryLivingIn?: string;
+  stateProvince?: string;
+  city?: string;
+  profession?: string;
+  educationLevel?: string;
+  sectMazhab?: string;
+  maritalStatus?: 'NEVER_MARRIED' | 'DIVORCED' | 'WIDOWED' | 'SEPARATED' | 'OTHER';
+  guardianName?: string;
+  guardianRelation?: string;
+  guardianPhone?: string;
+  packageId?: number;
+}
+
+export interface BulkImportResult {
+  totalProcessed: number;
+  importedCount: number;
+  skippedDuplicatesCount: number;
+  errors: Array<{ row: number; email: string; reason: string }>;
+  importedMembers: Array<{
+    userId: string;
+    email: string;
+    fullName: string;
+    profileId: string;
+    inviteToken: string;
+    inviteLink: string;
+  }>;
+}
+
+export async function bulkImportMembersInDb(
+  members: BulkImportMemberInput[],
+  adminActorId?: string
+): Promise<BulkImportResult> {
+  const result: BulkImportResult = {
+    totalProcessed: members.length,
+    importedCount: 0,
+    skippedDuplicatesCount: 0,
+    errors: [],
+    importedMembers: [],
+  };
+
+  if (!members || members.length === 0) return result;
+
+  // 1. Preload active packages to ensure valid package assignment
+  const activePackages = await db.select().from(packages).where(eq(packages.isActive, true));
+  const freePkg = activePackages.find((p) => p.priceUsd === '0.00' || Number(p.priceUsd) === 0) || activePackages[0];
+
+  const seenEmailsInBatch = new Set<string>();
+  const seenPhonesInBatch = new Set<string>();
+
+  for (let i = 0; i < members.length; i++) {
+    const rowNum = i + 1;
+    const item = members[i];
+
+    const fullName = (item.fullName || '').trim();
+    const rawEmail = (item.email || '').trim().toLowerCase();
+    const rawPhone = (item.phoneNumber || '').trim();
+    const phoneDigits = rawPhone.replace(/\D/g, '');
+
+    if (!fullName) {
+      result.errors.push({ row: rowNum, email: rawEmail || 'N/A', reason: 'Full name is required.' });
+      continue;
+    }
+    if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      result.errors.push({ row: rowNum, email: rawEmail, reason: 'A valid email address is required.' });
+      continue;
+    }
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+      result.errors.push({ row: rowNum, email: rawEmail, reason: 'Valid phone digits (7-15 digits) required.' });
+      continue;
+    }
+    const normalizedPhone = `+${phoneDigits}`;
+
+    if (seenEmailsInBatch.has(rawEmail)) {
+      result.skippedDuplicatesCount++;
+      result.errors.push({ row: rowNum, email: rawEmail, reason: 'Duplicate email inside this import batch.' });
+      continue;
+    }
+    if (seenPhonesInBatch.has(normalizedPhone)) {
+      result.skippedDuplicatesCount++;
+      result.errors.push({ row: rowNum, email: rawEmail, reason: 'Duplicate phone number inside this import batch.' });
+      continue;
+    }
+
+    const birthDate = new Date(`${item.dateOfBirth}T00:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(item.dateOfBirth) || Number.isNaN(birthDate.getTime()) || birthDate >= new Date()) {
+      result.errors.push({ row: rowNum, email: rawEmail, reason: 'Valid date of birth (YYYY-MM-DD) required.' });
+      continue;
+    }
+    const today = new Date();
+    const age =
+      today.getUTCFullYear() -
+      birthDate.getUTCFullYear() -
+      (today.getUTCMonth() < birthDate.getUTCMonth() ||
+      (today.getUTCMonth() === birthDate.getUTCMonth() && today.getUTCDate() < birthDate.getUTCDate())
+        ? 1
+        : 0);
+
+    if (age < 18) {
+      result.errors.push({ row: rowNum, email: rawEmail, reason: `Age is ${age}. Member must be at least 18.` });
+      continue;
+    }
+
+    const gender = item.gender === 'MALE' ? 'MALE' : 'FEMALE';
+    const targetPkg = item.packageId ? activePackages.find((p) => p.id === item.packageId) || freePkg : freePkg;
+
+    try {
+      const imported = await db.transaction(async (tx) => {
+        // Uniqueness check in DB
+        const [existing] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            or(
+              eq(sql`lower(${users.email})`, rawEmail),
+              eq(sql`regexp_replace(${users.phoneNumber}, '[^0-9]', '', 'g')`, phoneDigits)
+            )
+          )
+          .limit(1);
+
+        if (existing) {
+          throw new Error('DUPLICATE_ACCOUNT');
+        }
+
+        const inviteToken = crypto.randomBytes(24).toString('hex');
+        const inviteExpiresAt = new Date();
+        inviteExpiresAt.setDate(inviteExpiresAt.getDate() + 30); // 30-day secure invite token
+        const dummyPasswordHash = await bcrypt.hash(`INVITED_${inviteToken}`, 10);
+
+        const [newUser] = await tx
+          .insert(users)
+          .values({
+            email: rawEmail,
+            phoneNumber: normalizedPhone,
+            passwordHash: dummyPasswordHash,
+            role: 'MEMBER',
+            isActive: true,
+            isVerified: false,
+            inviteToken,
+            inviteExpiresAt,
+          })
+          .returning();
+
+        const profileId = `MB${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
+        const [newProfile] = await tx
+          .insert(profiles)
+          .values({
+            userId: newUser.id,
+            profileId,
+            createdBy: 'Admin Bulk CSV Import',
+            createdFor: 'self',
+            lookingFor: gender === 'MALE' ? 'FEMALE' : 'MALE',
+            fullName,
+            gender,
+            dateOfBirth: item.dateOfBirth,
+            age,
+            heightFeetInches: 'Not provided',
+            heightCm: 0,
+            maritalStatus: item.maritalStatus || 'NEVER_MARRIED',
+            religion: 'Islam',
+            sectMazhab: item.sectMazhab || 'Sunni / Hanafi',
+            motherTongue: 'English',
+            countryLivingIn: item.countryLivingIn || 'United States (USA)',
+            stateProvince: item.stateProvince || 'New York',
+            city: item.city || '',
+            zipCode: '',
+            profession: item.profession || 'Not provided',
+            educationLevel: item.educationLevel || 'Not provided',
+            guardianName: item.guardianName || '',
+            guardianRelation: item.guardianRelation || '',
+            guardianPhone: item.guardianPhone || '',
+            aboutMe: '',
+            whatIAmLookingFor: '',
+            photoPrivacy: 'HIDDEN',
+            completionPercentage: 35,
+            isApproved: true,
+            isFeatured: false,
+            kycStatus: 'NOT_SUBMITTED',
+          })
+          .returning();
+
+        const subExpiresAt = new Date();
+        subExpiresAt.setMonth(subExpiresAt.getMonth() + targetPkg.durationMonths);
+        await tx.insert(userSubscriptions).values({
+          userId: newUser.id,
+          packageId: targetPkg.id,
+          status: 'ACTIVE',
+          pricePaidUsd: '0.00',
+          contactCreditsRemaining: targetPkg.contactCredits,
+          expiresAt: subExpiresAt,
+          paymentReference: `BULK_IMPORT_GRANT:${newUser.id}`,
+        });
+
+        // Audit log
+        await tx.insert(auditLogs).values({
+          actorId: adminActorId || null,
+          action: 'BULK_MEMBER_IMPORT',
+          entityName: 'users',
+          entityId: newUser.id,
+          meta: { email: rawEmail, profileId, assignedPackage: targetPkg.name },
+        });
+
+        return {
+          userId: newUser.id,
+          email: newUser.email,
+          fullName: newProfile.fullName,
+          profileId: newProfile.profileId,
+          inviteToken,
+          inviteLink: `/setup-password?token=${inviteToken}`,
+        };
+      });
+
+      seenEmailsInBatch.add(rawEmail);
+      seenPhonesInBatch.add(normalizedPhone);
+      result.importedCount++;
+      result.importedMembers.push(imported);
+    } catch (err: any) {
+      if (err.message === 'DUPLICATE_ACCOUNT') {
+        result.skippedDuplicatesCount++;
+        result.errors.push({ row: rowNum, email: rawEmail, reason: 'An account with this email or phone number already exists.' });
+      } else {
+        result.errors.push({ row: rowNum, email: rawEmail, reason: err.message || 'Database transaction error.' });
+      }
+    }
+  }
+
+  return result;
+}
+
+export async function verifyInviteTokenFromDb(token: string) {
+  try {
+    if (!token || typeof token !== 'string') return { valid: false, error: 'Token missing.' };
+    const [user] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        inviteExpiresAt: users.inviteExpiresAt,
+        isActive: users.isActive,
+      })
+      .from(users)
+      .where(eq(users.inviteToken, token))
+      .limit(1);
+
+    if (!user) return { valid: false, error: 'Invalid or already utilized invite link.' };
+    if (user.inviteExpiresAt && user.inviteExpiresAt < new Date()) {
+      return { valid: false, error: 'This invitation link has expired. Please contact support.' };
+    }
+
+    const [profile] = await db
+      .select({ fullName: profiles.fullName, profileId: profiles.profileId })
+      .from(profiles)
+      .where(eq(profiles.userId, user.id))
+      .limit(1);
+
+    return {
+      valid: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: profile?.fullName || 'Valued Member',
+        profileId: profile?.profileId || '',
+      },
+    };
+  } catch (error) {
+    console.error('Error verifying invite token in DB:', error);
+    return { valid: false, error: 'Internal verification failure.' };
+  }
+}
+
+export async function setupPasswordWithInviteTokenInDb(token: string, newPassword: string) {
+  try {
+    if (!token || !newPassword || newPassword.length < 8) {
+      return { success: false, error: 'Password must be at least 8 characters long.' };
+    }
+
+    const verification = await verifyInviteTokenFromDb(token);
+    if (!verification.valid || !verification.user) {
+      return { success: false, error: verification.error || 'Invalid invite link.' };
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await db
+      .update(users)
+      .set({
+        passwordHash,
+        inviteToken: null,
+        inviteExpiresAt: null,
+        isVerified: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, verification.user.id));
+
+    return { success: true, email: verification.user.email };
+  } catch (error: any) {
+    console.error('Error setting password with invite token in DB:', error);
+    return { success: false, error: error.message || 'Password setup failed.' };
+  }
+}
+
 
 

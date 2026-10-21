@@ -70,7 +70,7 @@ export function validateProposalMessage(message: string): { valid: boolean; erro
       return {
         valid: false,
         error:
-          'In compliance with Islamic matrimonial ethics, casual or inappropriate language is strictly forbidden on Marriage Media USA.',
+          'In compliance with Islamic matrimonial ethics, casual or inappropriate language is strictly forbidden on MuslimBibah.',
       };
     }
   }

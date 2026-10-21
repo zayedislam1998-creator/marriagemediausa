@@ -6,7 +6,15 @@ import { StepsToNikkah } from '@/components/home/StepsToNikkah';
 import { TrustSafetyFaq } from '@/components/home/TrustSafetyFaq';
 import { ShieldCheck, CheckCircle2, FileText, Lock, Scale, AlertCircle, ArrowRight } from 'lucide-react';
 
-export default function HowItWorksPage() {
+import { getCmsPageSectionFromDb } from '@/db/queries';
+import { connection } from 'next/server';
+
+export const instant = false;
+
+export default async function HowItWorksPage() {
+  await connection();
+  const faqSection = await getCmsPageSectionFromDb('faq', 'general_faq').catch(() => null);
+  const faqs = (faqSection?.contentJson as any[]) || undefined;
   const tenPointChecks = [
     {
       num: '01',
@@ -78,7 +86,7 @@ export default function HowItWorksPage() {
       <section
         style={{
           backgroundImage:
-            'linear-gradient(135deg, rgba(6, 78, 59, 0.92) 0%, rgba(15, 23, 42, 0.88) 100%), url("https://marriagemediausa.com/design/admin_panel/slider_images/Marriage_Muslim.jpg")',
+            'linear-gradient(135deg, rgba(6, 78, 59, 0.92) 0%, rgba(15, 23, 42, 0.88) 100%), url("https://muslimbibah.com/design/admin_panel/slider_images/Marriage_Muslim.jpg")',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           paddingBlock: 'var(--space-3xl)',
@@ -88,7 +96,7 @@ export default function HowItWorksPage() {
       >
         <div style={{ maxWidth: 860, margin: '0 auto', paddingInline: 'var(--space-lg)' }}>
           <span className="badge badge-gold" style={{ marginBottom: 12 }}>
-            Official MarriageMediaUSA.com Guide
+            Official MuslimBibah.com Guide
           </span>
           <h1
             style={{
@@ -99,7 +107,7 @@ export default function HowItWorksPage() {
               textShadow: '0 4px 16px rgba(0,0,0,0.4)',
             }}
           >
-            How Marriage Media USA Works
+            How MuslimBibah Works
           </h1>
           <p style={{ fontSize: '1.05rem', color: 'rgba(255,255,255,0.9)', lineHeight: 1.65, margin: 0 }}>
             Find your righteous life partner safely through our 3-Step Matchmaking Workflow and 10-Level Profile Verification System.
@@ -110,7 +118,7 @@ export default function HowItWorksPage() {
       {/* 3 Simple Steps Component */}
       <StepsToNikkah />
 
-      {/* Detailed How It Works Walkthrough from marriagemediausa.com/Welcome2/how */}
+      {/* Detailed How It Works Walkthrough from muslimbibah.com/Welcome2/how */}
       <section style={{ paddingBlock: 'var(--space-3xl)', background: '#FFFFFF' }}>
         <div style={{ maxWidth: 'var(--max-content-width)', margin: '0 auto', paddingInline: 'var(--space-lg)' }}>
           <div className="ornamental-header" style={{ marginBottom: 'var(--space-2xl)' }}>
@@ -147,7 +155,7 @@ export default function HowItWorksPage() {
                 Step 2: Validate & Search Compatible Profiles
               </h3>
               <p style={{ fontSize: '0.875rem', color: 'var(--text-body)', lineHeight: 1.65 }}>
-                Once our moderation team validates your profile, use our Advanced Search by Age, Country, US State, City, Profession, Mother Tongue, or Profile ID. Receive automatic email notifications when matching profiles join MarriageMediaUSA.com.
+                Once our moderation team validates your profile, use our Advanced Search by Age, Country, US State, City, Profession, Mother Tongue, or Profile ID. Receive automatic email notifications when matching profiles join MuslimBibah.com.
               </p>
             </div>
 
@@ -189,7 +197,7 @@ export default function HowItWorksPage() {
               10-Level <span style={{ color: '#c0392b' }}>Profile Verification</span> System
             </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9375rem', maxWidth: 680, margin: '6px auto 0' }}>
-              Email your supporting documents to <strong>support@marriagemediausa.com</strong> with your Profile ID to earn Verified Badges across 10 trust categories.
+              Email your supporting documents to <strong>support@muslimbibah.com</strong> with your Profile ID to earn Verified Badges across 10 trust categories.
             </p>
             <img
               src="/images/w-title-b.png"
@@ -247,7 +255,7 @@ export default function HowItWorksPage() {
               <h3 style={{ fontSize: '1.25rem', fontWeight: 900, margin: 0 }}>Terms and Conditions</h3>
             </div>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-body)', lineHeight: 1.7, margin: 0 }}>
-              MarriageMediaUSA.com is strictly an Islamic matrimonial platform designed solely for lawful marriage (Nikkah). Any use of this website for casual dating, commercial solicitation, or fraudulent representation is strictly prohibited and results in immediate permanent account termination. Members and their legal guardians (Wali) warrant that all biographical, educational, marital, and legal residency details submitted are truthful and accurate.
+              MuslimBibah.com is strictly an Islamic matrimonial platform designed solely for lawful marriage (Nikkah). Any use of this website for casual dating, commercial solicitation, or fraudulent representation is strictly prohibited and results in immediate permanent account termination. Members and their legal guardians (Wali) warrant that all biographical, educational, marital, and legal residency details submitted are truthful and accurate.
             </p>
           </div>
 
@@ -267,14 +275,14 @@ export default function HowItWorksPage() {
               <h3 style={{ fontSize: '1.25rem', fontWeight: 900, margin: 0 }}>Matrimonial Safety Disclaimer</h3>
             </div>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-body)', lineHeight: 1.7, margin: 0 }}>
-              While MarriageMediaUSA.com conducts manual validation and offers 10-point document verification, families and guardians (Wali) are strongly advised to perform independent family background checks prior to finalizing marriage commitments. Never send money or share financial credentials with any online acquaintance.
+              While MuslimBibah.com conducts manual validation and offers 10-point document verification, families and guardians (Wali) are strongly advised to perform independent family background checks prior to finalizing marriage commitments. Never send money or share financial credentials with any online acquaintance.
             </p>
           </div>
         </div>
       </section>
 
       {/* FAQ Accordion */}
-      <TrustSafetyFaq />
+      <TrustSafetyFaq faqs={faqs} />
 
       <Footer />
       <BottomNav />

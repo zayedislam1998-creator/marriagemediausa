@@ -90,7 +90,7 @@ export function ProfileCardsStream({ profiles }: ProfileCardsStreamProps) {
               <img src="/images/w-title-b.png" alt="Divider" />
             </div>
             <p style={{ color: '#475569', fontSize: '0.9rem', maxWidth: 650, margin: '0 auto' }}>
-              Real registered brides and grooms from MarriageMediaUSA.com with authentic Profile IDs, photographs,
+              Real registered brides and grooms from MuslimBibah.com with authentic Profile IDs, photographs,
               verified education, and family details.
             </p>
           </div>
@@ -153,7 +153,7 @@ export function ProfileCardsStream({ profiles }: ProfileCardsStreamProps) {
                   <img
                     src={
                       member.photo_url ||
-                      'https://marriagemediausa.com/design/member_image/Sahida_Akter_Ruma5.jpg'
+                      'https://muslimbibah.com/design/member_image/Sahida_Akter_Ruma5.jpg'
                     }
                     alt={member.full_name}
                     style={{
@@ -289,7 +289,7 @@ export function ProfileCardsStream({ profiles }: ProfileCardsStreamProps) {
                   <img
                     src={
                       p.photo_url ||
-                      'https://marriagemediausa.com/design/member_image/Sahida_Akter_Ruma5.jpg'
+                      'https://muslimbibah.com/design/member_image/Sahida_Akter_Ruma5.jpg'
                     }
                     alt={p.full_name}
                     style={{

@@ -1,6 +1,6 @@
 'use server';
 
-import { getCurrentSession } from '@/lib/auth/session';
+import { getVerifiedSession } from '@/lib/auth/verifiedSession';
 import {
   getFormBuilderConfigsFromDb,
   getFormBuilderConfigById,
@@ -30,7 +30,7 @@ export async function saveFormBuilderConfigAction(
   }
 ) {
   try {
-    const session = await getCurrentSession();
+    const session = await getVerifiedSession();
     if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'EDITOR')) {
       return { success: false, error: 'Unauthorized: Admin role required' };
     }

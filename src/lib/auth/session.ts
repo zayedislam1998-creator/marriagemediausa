@@ -16,9 +16,11 @@ export interface SessionPayload {
   dailyViewLimit: number;
 }
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || 'muslimbibah-2026-sacred-production-secret-key-halal'
-);
+const configuredAuthSecret = process.env.AUTH_SECRET;
+if (!configuredAuthSecret || configuredAuthSecret.length < 32) {
+  throw new Error('AUTH_SECRET must be configured with at least 32 characters.');
+}
+const JWT_SECRET = new TextEncoder().encode(configuredAuthSecret);
 
 const COOKIE_NAME = 'mb_session';
 const SESSION_DURATION = 7 * 24 * 60 * 60; // 7 days in seconds

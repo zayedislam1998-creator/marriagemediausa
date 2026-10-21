@@ -1,13 +1,16 @@
 import { DomainRepository } from '@/db/repository';
+import { getPublicProfilesFromDb } from '@/db/queries';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { Footer } from '@/components/layout/Footer';
 import { SearchWorkspace } from '@/components/search/SearchWorkspace';
+import { connection } from 'next/server';
 
 export const instant = false;
 
-export default function SearchPage() {
-  const profiles = DomainRepository.getProfiles();
+export default async function SearchPage() {
+  await connection();
+  const profiles = await getPublicProfilesFromDb();
   const countries = DomainRepository.getCountries();
   const usStates = DomainRepository.getUSStates();
   const professions = DomainRepository.getProfessions();

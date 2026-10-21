@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { ArrowLeft, LogOut, ShieldCheck } from 'lucide-react';
-import { AdminStore } from '@/lib/admin/store';
 import { EditorCmsStudio } from '@/components/admin/EditorCmsStudio';
 import { useRequireAuth } from '@/lib/firebase/useRequireAuth';
 import { AccessDenied } from '@/components/auth/AccessDenied';
@@ -51,9 +50,6 @@ export default function EditorCmsDashboard() {
       />
     );
   }
-
-  const stories = AdminStore.getStories();
-  const articles = AdminStore.getArticles();
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-app)', display: 'flex', flexDirection: 'column' }}>
@@ -137,7 +133,7 @@ export default function EditorCmsDashboard() {
           </span>
         </div>
 
-        <EditorCmsStudio initialStories={stories} initialArticles={articles} />
+        <EditorCmsStudio />
       </main>
     </div>
   );

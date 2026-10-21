@@ -5,7 +5,7 @@ export function WhyHalalGrid() {
   const pillars = [
     {
       title: '10-Level Profile Verification System',
-      desc: 'Marriage Media USA verifies 10 vital credentials: Identity, Citizenship, Age, Education, Profession, Marital Status, Religion, Address, Mobile, and Email.',
+      desc: 'MuslimBibah verifies 10 vital credentials: Identity, Citizenship, Age, Education, Profession, Marital Status, Religion, Address, Mobile, and Email.',
       icon: ShieldCheck,
       gradient: 'linear-gradient(135deg, #10B981, #047857)',
       shadow: '#064E3B',
@@ -79,7 +79,7 @@ export function WhyHalalGrid() {
         <div className="ornamental-header" style={{ marginBottom: 'var(--space-2xl)' }}>
           <div className="badge badge-emerald" style={{ marginBottom: 8 }}>
             <ShieldCheck size={12} />
-            Why Choose MarriageMediaUSA.com
+            Why Choose MuslimBibah.com
           </div>
           <h2
             style={{
@@ -90,10 +90,10 @@ export function WhyHalalGrid() {
               fontFamily: 'var(--font-display)',
             }}
           >
-            Why Families Trust <span style={{ color: '#c0392b' }}>Marriage Media USA</span>
+            Why Families Trust <span style={{ color: '#c0392b' }}>MuslimBibah</span>
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9375rem', maxWidth: 660, margin: '0 auto' }}>
-            Marriage Media USA is a fast-growing global matrimonial service built to help Muslim families find righteous life partners with complete trust, security, and Islamic dignity.
+            MuslimBibah is a fast-growing global matrimonial service built to help Muslim families find righteous life partners with complete trust, security, and Islamic dignity.
           </p>
           <img
             src="/images/w-title-b.png"
@@ -155,7 +155,7 @@ export function WhyHalalGrid() {
           })}
         </div>
 
-        {/* 10-Point Verification Strip from marriagemediausa.com/Welcome2/verify_profile */}
+        {/* 10-Point Verification Strip from muslimbibah.com/Welcome2/verify_profile */}
         <div
           className="card-3d-gold"
           style={{
@@ -175,7 +175,7 @@ export function WhyHalalGrid() {
           >
             <div>
               <span className="badge badge-gold" style={{ marginBottom: 6 }}>
-                Official Marriage Media USA Verification Standard
+                Official MuslimBibah Verification Standard
               </span>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 900, color: 'var(--text-main)', margin: 0 }}>
                 10-Point Profile Verification Checklist

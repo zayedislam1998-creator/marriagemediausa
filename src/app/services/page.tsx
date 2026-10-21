@@ -1,5 +1,3 @@
-'use client';
-
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Footer } from '@/components/layout/Footer';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -12,10 +10,14 @@ import {
   ShieldCheck,
   Sparkles,
   PhoneCall,
-  CheckCircle2,
   Calendar,
-  MapPin,
+  CheckCircle2,
 } from 'lucide-react';
+import { WeddingServicesInquiryForm } from '@/components/services/WeddingServicesInquiryForm';
+import { getCmsPageSectionFromDb } from '@/db/queries';
+import { connection } from 'next/server';
+
+export const instant = false;
 
 const SERVICES_LIST = [
   {
@@ -76,7 +78,11 @@ const SERVICES_LIST = [
   },
 ];
 
-export default function WeddingServicesPage() {
+export default async function WeddingServicesPage() {
+  await connection();
+  const introSection = await getCmsPageSectionFromDb('services', 'services_intro').catch(() => null);
+  const customIntro = (introSection?.contentJson as any) || null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-app)' }}>
       <AppHeader />
@@ -288,56 +294,7 @@ export default function WeddingServicesPage() {
               Tell us your preferred date, city, and expected guests. Our Halal wedding coordinator will contact you within 24 hours.
             </p>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                alert('JazakAllah Khair! Your wedding service inquiry has been received. Our coordinator will contact you shortly.');
-              }}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: '1rem',
-                textAlign: 'left',
-              }}
-            >
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#334155', marginBottom: 5 }}>
-                  Full Name
-                </label>
-                <input type="text" required placeholder="Your full name" className="input-3d" />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#334155', marginBottom: 5 }}>
-                  Phone / WhatsApp
-                </label>
-                <input type="tel" required placeholder="+1 (555) 000-0000" className="input-3d" />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#334155', marginBottom: 5 }}>
-                  Event City / State
-                </label>
-                <input type="text" required placeholder="e.g. New York, Dallas, Toronto" className="input-3d" />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#334155', marginBottom: 5 }}>
-                  Services Needed
-                </label>
-                <select className="input-3d">
-                  <option>All-Inclusive Full Wedding Package</option>
-                  <option>Venue & Mosque Only</option>
-                  <option>Halal Catering Only</option>
-                  <option>Purdah Photography Only</option>
-                  <option>Stage & Floral Decor Only</option>
-                </select>
-              </div>
-
-              <div style={{ gridColumn: '1 / -1', marginTop: 10 }}>
-                <button type="submit" className="btn-3d-emerald" style={{ width: '100%', padding: '13px', fontSize: '0.95rem' }}>
-                  <Sparkles size={18} />
-                  Submit Wedding Service Inquiry
-                </button>
-              </div>
-            </form>
+            <WeddingServicesInquiryForm />
           </div>
         </section>
       </main>

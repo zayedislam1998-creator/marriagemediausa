@@ -1,111 +1,78 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { users, profiles, userSubscriptions, packages, paymentTransactions } from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
-import { getCurrentSession } from '@/lib/auth/session';
+import { and, eq, gt, sql } from 'drizzle-orm';
+import { getVerifiedSession } from '@/lib/auth/verifiedSession';
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    const session = await getCurrentSession();
-    if (!session || (session.role !== 'SUPER_ADMIN' && session.role !== 'ADMIN' as any)) {
-      return NextResponse.json({ success: false, error: 'Unauthorized: Admin access required.' }, { status: 401 });
+    const session = await getVerifiedSession();
+    if (!session || session.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Super admin access required.' }, { status: 401 });
     }
 
-    // 1. Total Registered Members (excluding super admins)
-    const [memberCountRes] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(eq(users.role, 'MEMBER'));
-    const totalMembers = Number(memberCountRes?.count ?? 0);
+    const now = new Date();
+    const [userCountRes] = await db.select({ count: sql<number>`count(*)` }).from(users);
+    const [memberCountRes] = await db.select({ count: sql<number>`count(*)` }).from(users).where(eq(users.role, 'MEMBER'));
+    const [profileCountRes] = await db.select({ count: sql<number>`count(*)` }).from(profiles);
+    const [verifiedCountRes] = await db.select({ count: sql<number>`count(*)` }).from(profiles).where(eq(profiles.kycStatus, 'VERIFIED'));
+    const activeSubFilter = and(eq(userSubscriptions.status, 'ACTIVE'), gt(userSubscriptions.expiresAt, now));
+    const [totalSubsRes] = await db.select({ count: sql<number>`count(*)` }).from(userSubscriptions);
+    const [activeSubsRes] = await db.select({ count: sql<number>`count(*)` }).from(userSubscriptions).where(activeSubFilter);
 
-    // 2. Total Profiles in PostgreSQL
-    const [profileCountRes] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(profiles);
-    const totalProfiles = Number(profileCountRes?.count ?? 0);
+    // Revenue and transaction telemetry
+    const realCompletedPayment = and(
+      eq(paymentTransactions.status, 'COMPLETED'),
+      sql`coalesce(${paymentTransactions.rawPayload}->>'simulated', 'false') <> 'true'`,
+    );
+    const [totalTxRes] = await db.select({ count: sql<number>`count(*)` }).from(paymentTransactions);
+    const [completedTxRes] = await db.select({ count: sql<number>`count(*)` }).from(paymentTransactions).where(eq(paymentTransactions.status, 'COMPLETED'));
+    const [realTxRes] = await db.select({ count: sql<number>`count(*)` }).from(paymentTransactions).where(realCompletedPayment);
+    const [simulatedTxRes] = await db.select({ count: sql<number>`count(*)` }).from(paymentTransactions).where(sql`coalesce(${paymentTransactions.rawPayload}->>'simulated', 'false') = 'true'`);
+    const [revenueRes] = await db.select({ sum: sql<string>`coalesce(sum(${paymentTransactions.amount}), 0)` })
+      .from(paymentTransactions).where(realCompletedPayment);
 
-    // 3. Verified Profiles (KYC verified or approved by admin)
-    const [verifiedCountRes] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(profiles)
-      .where(sql`${profiles.kycStatus} = 'VERIFIED' OR ${profiles.isApproved} = true`);
-    const verifiedProfiles = Number(verifiedCountRes?.count ?? 0);
+    const allPackages = await db.select().from(packages).where(eq(packages.isActive, true)).orderBy(packages.id);
+    const subBreakdown = await db.select({ packageId: userSubscriptions.packageId, count: sql<number>`count(*)` })
+      .from(userSubscriptions).where(activeSubFilter).groupBy(userSubscriptions.packageId);
+    const paymentBreakdown = await db.select({ packageId: paymentTransactions.packageId, revenue: sql<string>`coalesce(sum(${paymentTransactions.amount}), 0)` })
+      .from(paymentTransactions).where(and(realCompletedPayment, sql`${paymentTransactions.packageId} is not null`))
+      .groupBy(paymentTransactions.packageId);
 
-    // 4. Real Active Subscriptions
-    const [activeSubsRes] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(userSubscriptions)
-      .where(eq(userSubscriptions.status, 'ACTIVE'));
-    const activeSubscriptions = Number(activeSubsRes?.count ?? 0);
-
-    // 5. Real Platform Revenue from completed payment transactions
-    const [revenueRes] = await db
-      .select({ sum: sql<string>`coalesce(sum(${paymentTransactions.amount}), 0)` })
-      .from(paymentTransactions)
-      .where(eq(paymentTransactions.status, 'COMPLETED'));
-    let totalRevenue = parseFloat(revenueRes?.sum || '0');
-
-    // If no completed payment_transactions records exist yet, compute from active paid subscriptions
-    if (totalRevenue === 0 && activeSubscriptions > 0) {
-      const [subRevenueRes] = await db
-        .select({ sum: sql<string>`coalesce(sum(${userSubscriptions.pricePaidUsd}), 0)` })
-        .from(userSubscriptions)
-        .where(eq(userSubscriptions.status, 'ACTIVE'));
-      totalRevenue = parseFloat(subRevenueRes?.sum || '0');
-    }
-
-    // 6. Real Economic Breakdown across active packages
-    const allPackages = await db
-      .select()
-      .from(packages)
-      .where(eq(packages.isActive, true))
-      .orderBy(packages.id);
-
-    // Count subscriptions per package
-    const subBreakdown = await db
-      .select({
-        packageId: userSubscriptions.packageId,
-        count: sql<number>`count(*)`,
-        totalPaid: sql<string>`coalesce(sum(${userSubscriptions.pricePaidUsd}), 0)`,
-      })
-      .from(userSubscriptions)
-      .where(eq(userSubscriptions.status, 'ACTIVE'))
-      .groupBy(userSubscriptions.packageId);
-
-    const breakdownMap = new Map<number, { count: number; totalPaid: number }>();
-    subBreakdown.forEach((b) => {
-      breakdownMap.set(b.packageId, { count: Number(b.count), totalPaid: parseFloat(b.totalPaid) });
-    });
-
-    const packageBreakdown = allPackages.map((pkg) => {
-      const stats = breakdownMap.get(pkg.id) || { count: 0, totalPaid: 0 };
-      const price = parseFloat(pkg.priceUsd);
-      const computedRevenue = stats.totalPaid > 0 ? stats.totalPaid : price * stats.count;
-
-      return {
-        id: pkg.id,
-        name: pkg.name,
-        priceUsd: price,
-        badgeTitle: pkg.badgeTitle || 'Member',
-        subscriberCount: stats.count,
-        revenue: computedRevenue,
-      };
-    });
+    const subscriberCounts = new Map(subBreakdown.map((row) => [row.packageId, Number(row.count)]));
+    const packageRevenue = new Map(paymentBreakdown.map((row) => [row.packageId, Number(row.revenue)]));
+    const packageBreakdown = allPackages.map((pkg) => ({
+      id: pkg.id,
+      name: pkg.name,
+      priceUsd: Number(pkg.priceUsd),
+      badgeTitle: pkg.badgeTitle || 'Member',
+      subscriberCount: subscriberCounts.get(pkg.id) || 0,
+      revenue: packageRevenue.get(pkg.id) || 0,
+    }));
 
     return NextResponse.json({
       success: true,
       stats: {
-        totalMembers: totalMembers > 0 ? totalMembers : totalProfiles,
-        totalProfiles,
-        verifiedProfiles,
-        activeSubscriptions,
-        totalRevenue,
+        totalUsers: Number(userCountRes?.count ?? 0),
+        totalMembers: Number(memberCountRes?.count ?? 0),
+        totalProfiles: Number(profileCountRes?.count ?? 0),
+        verifiedProfiles: Number(verifiedCountRes?.count ?? 0),
+        totalSubscriptions: Number(totalSubsRes?.count ?? 0),
+        activeSubscriptions: Number(activeSubsRes?.count ?? 0),
+        totalPaymentTransactions: Number(totalTxRes?.count ?? 0),
+        completedPaymentTransactions: Number(completedTxRes?.count ?? 0),
+        realPaymentTransactions: Number(realTxRes?.count ?? 0),
+        simulatedTransactions: Number(simulatedTxRes?.count ?? 0),
+        totalRevenue: Number(revenueRes?.sum || 0),
         packageBreakdown,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: now.toISOString(),
       },
-    });
+    }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {
+    if (error?.digest?.startsWith('NEXT_') || error?.digest === 'HANGING_PROMISE_REJECTION' || error?.message?.includes('bail out of prerendering')) {
+      throw error;
+    }
     console.error('Error fetching admin analytics:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Could not load current database analytics.' }, { status: 500 });
   }
 }

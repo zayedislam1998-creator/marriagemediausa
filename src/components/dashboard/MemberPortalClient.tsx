@@ -533,7 +533,7 @@ export function MemberPortalClient({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>
-                  Authentic Marriage Media USA Membership Tiers ($0 – $6,500)
+                  Authentic MuslimBibah Membership Tiers ($0 – $6,500)
                 </h3>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   Current Active Tier: <strong>{tier}</strong> ({creditBalance >= 9000 ? 'Unlimited' : creditBalance} Contact Credits)

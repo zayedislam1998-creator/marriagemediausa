@@ -23,8 +23,7 @@ export async function firebaseRegister(
   email: string,
   pass: string,
   fullName: string,
-  gender: 'MALE' | 'FEMALE' = 'FEMALE',
-  role: 'MEMBER' | 'ADMIN' | 'SUPER_ADMIN' = 'MEMBER'
+  gender: 'MALE' | 'FEMALE' = 'FEMALE'
 ): Promise<AuthResponse> {
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
@@ -39,8 +38,8 @@ export async function firebaseRegister(
       uid: fbUser.uid,
       email: fbUser.email || email,
       fullName,
-      role,
-      membershipTier: role === 'SUPER_ADMIN' ? 'ELITE' : 'FREE',
+      role: 'MEMBER',
+      membershipTier: 'FREE',
       status: 'ACTIVE',
       gender,
       profileId,
@@ -79,14 +78,12 @@ export async function firebaseLogin(email: string, pass: string): Promise<AuthRe
     // If profile document doesn't exist yet, auto-provision
     if (!userProfile) {
       const userDocRef = doc(db, 'users', fbUser.uid);
-      const isSuperAdmin = email.toLowerCase() === 'admin@marriagemediausa.com' || email.toLowerCase().includes('admin');
-
       userProfile = {
         uid: fbUser.uid,
         email: fbUser.email || email,
         fullName: fbUser.displayName || 'Member',
-        role: isSuperAdmin ? 'SUPER_ADMIN' : 'MEMBER',
-        membershipTier: isSuperAdmin ? 'ELITE' : 'FREE',
+        role: 'MEMBER',
+        membershipTier: 'FREE',
         status: 'ACTIVE',
         profileId: `MB_${Date.now().toString().slice(-6)}`,
         createdAt: serverTimestamp(),
@@ -106,33 +103,6 @@ export async function firebaseLogin(email: string, pass: string): Promise<AuthRe
     };
   } catch (error: any) {
     console.error('Firebase login error:', error);
-    if (
-      (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') &&
-      email.toLowerCase() === 'admin@marriagemediausa.com' &&
-      pass === 'Admin@MarriageMedia2026'
-    ) {
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        const fbUser = cred.user;
-        const userDocRef = doc(db, 'users', fbUser.uid);
-        const userProfile: FirestoreUser = {
-          uid: fbUser.uid,
-          email: fbUser.email || email,
-          fullName: 'Super Administrator',
-          role: 'SUPER_ADMIN',
-          membershipTier: 'ELITE',
-          status: 'ACTIVE',
-          profileId: 'MMU_ADMIN',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        };
-        await setDoc(userDocRef, userProfile);
-        return { success: true, user: userProfile };
-      } catch (createErr) {
-        console.warn('Firebase admin auto-provisioning caught:', createErr);
-      }
-    }
-
     let errorMsg = 'Invalid email or password.';
     if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
       errorMsg = 'Invalid credentials. Please verify your email and password.';

@@ -15,7 +15,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // ============================================================================
 // 0. ENUMS
@@ -70,6 +70,8 @@ export const users = pgTable('users', {
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+  inviteToken: varchar('invite_token', { length: 255 }),
+  inviteExpiresAt: timestamp('invite_expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -104,7 +106,9 @@ export const userSubscriptions = pgTable('user_subscriptions', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   paymentReference: varchar('payment_reference', { length: 100 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex('unique_active_user_subscription').on(table.userId).where(sql`${table.status} = 'ACTIVE'`),
+]);
 
 // ============================================================================
 // 4. PROFILES (85+ FIELD BIODATA)
@@ -592,5 +596,64 @@ export const processedWebhookEvents = pgTable('processed_webhook_events', {
   eventType: varchar('event_type', { length: 100 }).notNull(),
   processedAt: timestamp('processed_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ============================================================================
+// 22. CONTACT & WEDDING SERVICE INQUIRIES (DURABLE INBOX)
+// ============================================================================
+export const contactSubmissions = pgTable('contact_submissions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  type: varchar('type', { length: 50 }).default('CONTACT').notNull(), // 'CONTACT' | 'WEDDING_SERVICE' | 'GENERAL'
+  fullName: varchar('full_name', { length: 150 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
+  phoneNumber: varchar('phone_number', { length: 50 }).notNull(),
+  subject: varchar('subject', { length: 255 }),
+  cityState: varchar('city_state', { length: 150 }),
+  serviceType: varchar('service_type', { length: 100 }),
+  message: text('message').notNull(),
+  status: varchar('status', { length: 30 }).default('NEW').notNull(), // 'NEW' | 'IN_REVIEW' | 'CONTACTED' | 'RESOLVED'
+  adminNotes: text('admin_notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ============================================================================
+// 23. CMS ARTICLES & ADVICE HUB
+// ============================================================================
+export const cmsArticles = pgTable('cms_articles', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  category: varchar('category', { length: 100 }).notNull(),
+  author: varchar('author', { length: 120 }).default('Editorial Board').notNull(),
+  excerpt: text('excerpt').notNull(),
+  content: text('content').notNull(),
+  readsCount: integer('reads_count').default(0).notNull(),
+  isPublished: boolean('is_published').default(true).notNull(),
+  isFeatured: boolean('is_featured').default(false).notNull(),
+  publishedAt: timestamp('published_at', { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ============================================================================
+// 24. CMS PAGE SECTIONS & EDITABLE SITE CONTENT
+// ============================================================================
+export const cmsPageSections = pgTable(
+  'cms_page_sections',
+  {
+    id: serial('id').primaryKey(),
+    pageKey: varchar('page_key', { length: 80 }).notNull(), // 'home', 'services', 'how-it-works', 'why-us', 'contact', 'faq', 'seo'
+    sectionKey: varchar('section_key', { length: 80 }).notNull(), // 'hero', 'faq_list', 'contact_details', 'seo_meta', etc.
+    title: varchar('title', { length: 255 }),
+    contentJson: jsonb('content_json').default({}).notNull(),
+    isPublished: boolean('is_published').default(true).notNull(),
+    updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('unique_page_section').on(table.pageKey, table.sectionKey),
+  ]
+);
+
 
 

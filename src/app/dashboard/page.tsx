@@ -1,7 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { CreditWalletService } from '@/lib/social/credits';
 import { DomainRepository } from '@/db/repository';
 import { MemberExecutiveLayout } from '@/components/dashboard/MemberExecutiveLayout';
 import { useRequireAuth } from '@/lib/firebase/useRequireAuth';
@@ -9,6 +9,34 @@ import { Crown, ArrowRight, LogOut } from 'lucide-react';
 
 export default function MemberDashboard() {
   const { user, isLoading, isAdmin, logout } = useRequireAuth();
+  const [curatedMatches, setCuratedMatches] = useState<any[]>([]);
+  const [livePackages, setLivePackages] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/profiles/search', { cache: 'no-store' })
+      .then((res) => {
+        const contentType = res.headers.get('content-type') || '';
+        return (res.ok && contentType.includes('application/json')) ? res.json() : null;
+      })
+      .then((data) => {
+        if (data?.success && Array.isArray(data.profiles)) {
+          setCuratedMatches(data.profiles);
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/packages', { cache: 'no-store' })
+      .then((res) => {
+        const contentType = res.headers.get('content-type') || '';
+        return (res.ok && contentType.includes('application/json')) ? res.json() : null;
+      })
+      .then((data) => {
+        if (data?.success && Array.isArray(data.packages)) {
+          setLivePackages(data.packages);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   if (isLoading) {
     return (
@@ -40,6 +68,7 @@ export default function MemberDashboard() {
       </div>
     );
   }
+
 
   if (!user) {
     return (
@@ -98,21 +127,9 @@ export default function MemberDashboard() {
     );
   }
 
-  const tier = user.membershipTier || 'GOLD';
-  const creditBalance = CreditWalletService.getCreditBalance(user.uid, tier);
-  const curatedMatches = DomainRepository.getProfiles();
-  const packages = DomainRepository.getPackages();
-
-  const dailyLimit =
-    tier === 'ELITE'
-      ? 999
-      : tier === 'DIAMOND'
-      ? 250
-      : tier === 'GOLD'
-      ? 150
-      : tier === 'SILVER'
-      ? 50
-      : 15;
+  const tier = user.membershipTier || 'FREE';
+  const creditBalance = Number(user.contactCredits) || 0;
+  const dailyLimit = Number(user.dailyViewLimit) || 15;
 
   return (
     <div>
@@ -194,7 +211,7 @@ export default function MemberDashboard() {
         myProfile={null}
         creditBalance={creditBalance}
         curatedMatches={curatedMatches}
-        packages={packages}
+        packages={livePackages}
         resumes={[]}
       />
     </div>

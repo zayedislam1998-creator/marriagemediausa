@@ -33,11 +33,13 @@ export interface FirestoreUser {
   email: string;
   fullName: string;
   role: 'SUPER_ADMIN' | 'ADMIN' | 'MEMBER' | 'MODERATOR';
-  membershipTier: 'FREE' | 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'ELITE';
+  membershipTier: 'FREE' | 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'PLATINUM' | 'ELITE';
   status: 'ACTIVE' | 'SUSPENDED';
   phone?: string;
   gender?: 'MALE' | 'FEMALE';
   profileId?: string;
+  dailyViewLimit?: number;
+  contactCredits?: number;
   createdAt?: any;
   updatedAt?: any;
 }

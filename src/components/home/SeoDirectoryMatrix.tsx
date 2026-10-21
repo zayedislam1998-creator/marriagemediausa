@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Globe, MapPin, Briefcase, Layers, Flag } from 'lucide-react';
 
 export function SeoDirectoryMatrix() {
-  // Real Popular Search Terms from https://marriagemediausa.com
+  // Real Popular Search Terms from https://muslimbibah.com
   const languages = [
     'Bengali',
     'English',
@@ -112,7 +112,7 @@ export function SeoDirectoryMatrix() {
         <div className="ornamental-header" style={{ marginBottom: 'var(--space-2xl)' }}>
           <div className="badge badge-sapphire" style={{ marginBottom: 8 }}>
             <Layers size={12} />
-            MarriageMediaUSA.com Popular Search Directory
+            MuslimBibah.com Popular Search Directory
           </div>
           <h2
             style={{
