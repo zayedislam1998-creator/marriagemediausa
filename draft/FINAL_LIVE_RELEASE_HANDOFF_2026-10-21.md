@@ -8,13 +8,24 @@
 
 This is the single release handoff. Follow it in order and keep the evidence in this document or the linked review. The owner has asked for the site to be made ready and released after the gates pass. Do not ask for another approval for routine implementation or the release described here. If the configured Coolify project/domain is different from `marriagemediausa.com`, stop before deploying and report that exact mismatch.
 
+## Latest verification checkpoint — October 21, 2026
+
+- Primary implementation commit: `232a239fe2d15a5b19542727eec222edbf98df4f` (`MuslimBibah.com`).
+- Sister release commit: `4de29cc1d5db90970f2542a543a6d5ce9368d003` (`marriagemediausa.com`), pushed successfully to `origin/main`.
+- Both current source trees passed `npm run build` and TypeScript: primary generated 46 routes; sister generated 45 routes.
+- Targeted ESLint on changed files passed with zero errors and five existing warnings (unused `usStates` prop and `<img>` optimization warnings). Full-repository lint has not been certified.
+- The new code binds checkout to the authenticated session, makes the primary and sister payment routes use session identity, removes fabricated homepage member counts, routes all public package reads through `/api/packages`, and makes schema/index DDL failures stop migration instead of being swallowed. Passwords are already stored as bcrypt hashes; user IDs are identifiers and should not be hashed.
+- **Live deployment is not confirmed.** After push, `https://marriagemediausa.com` returned HTTP 200 but still served the old `15,420` homepage text with `X-Nextjs-Cache: HIT` and `Cache-Control: s-maxage=31536000`, including on a commit-specific query URL. The pushed commit is not yet evidenced on the live site. Coolify deployment status is not available from this workspace; deploy commit `4de29cc` in the linked Coolify app and verify the domain/cache before calling the release live.
+- Production database connectivity/migration, restorable backup, Coolify app/branch linkage, persistent uploads, staging acceptance, payment sandbox, and operational email delivery remain unverified. Do not run production schema migrations until the backup and staging gates below pass.
+
 ## 1. Current state and deployment target
 
-- The latest source build in `MuslimBibah.com` compiled, passed TypeScript, and generated 46 routes.
-- The latest source build in `marriagemediausa.com` compiled, passed TypeScript, and generated 57 routes, but package queries logged database hostname resolution errors in this environment. This is not proof that the sister package can reach its intended production database.
-- Both worktrees contain extensive uncommitted changes. Nothing in the current worktree should be treated as an accepted release commit.
+
+- The latest primary build compiled, passed TypeScript, and generated 46 routes (verified October 21, 2026).
+- The latest sister build compiled, passed TypeScript, and generated 45 routes (verified October 21, 2026). This build alone does not prove production database connectivity.
+- The reviewed changes are committed in both worktrees; the sister release commit is pushed to `origin/main`.
 - The sister package README specifies Coolify with a Node/standalone Next.js deployment and `marriagemediausa.com`. The primary package also contains Firebase static-export scripts and a Firebase project config. **Do not deploy the dynamic MarriageMediaUSA app through `deploy:firebase`, static export, or Firebase Hosting rewrites.** The application needs its Next.js server/API routes and PostgreSQL connection.
-- The current sister repository has Git remote `origin` at `https://github.com/zayedislam1998-creator/marriagemediausa.git`, tracking `main`. Confirm Coolify is actually linked to this repository, branch, and domain before pushing.
+- The current sister repository has Git remote `origin` at `https://github.com/zayedislam1998-creator/marriagemediausa.git`, tracking `main`. Verify Coolify is linked to this repository, branch, and domain before promoting/deploying a commit.
 
 ## 2. Required implementation work — primary workspace first
 
@@ -23,11 +34,11 @@ Complete and review code in `MuslimBibah.com` first, then carry the accepted cha
 ### 2.1 Close remaining product and data gaps
 
 - [ ] **CMS coverage:** Current DB-backed public editing is present for homepage hero/banner/FAQ, contact support details, and stories. Implement the remaining promised public page sections (at minimum services, how-it-works, why-us, navigation/footer, and SEO), or document a clear reduced scope and remove unsupported editor controls. Ensure draft content is private; add/edit/publish/unpublish behavior must persist across restart. If revisions/rollback remain in the approved plan, implement and verify them; otherwise explicitly defer them.
-- [ ] **Package API policy:** Every user-facing package view—homepage, `/membership-plan`, and `/dashboard`—must use `/api/packages` as the canonical read contract, per `AGENTS.md`. Remove view-specific hardcoded prices and separate direct package reads where they bypass that contract. Admin writes remain PostgreSQL-backed. A package update must become visible across a new browser/device within a documented SLA; checkout must re-check the active DB package and current price. Preserve historical member entitlements/snapshots.
+- [x] **Package API policy (source implementation):** Every user-facing package view—homepage, `/membership-plan`, and `/dashboard`—must use `/api/packages` as the canonical read contract, per `AGENTS.md`. Remove view-specific hardcoded prices and separate direct package reads where they bypass that contract. Admin writes remain PostgreSQL-backed. A package update must become visible across a new browser/device within a documented SLA; checkout must re-check the active DB package and current price. Preserve historical member entitlements/snapshots.
 - [ ] **Analytics policy:** Keep real database counts for `users`, `profiles`, `user_subscriptions`, and `payment_transactions`. Real completed payments alone contribute to revenue. Simulated/test transactions, pending payments, package list prices, and manual grants must not be shown as paid revenue.
 - [ ] **No fabricated member data:** Keep the seed-profile fallbacks removed from homepage, search, dashboard, and profile detail. Empty DB results must show an honest empty state; only active, approved database profiles may be shown as real members.
 - [ ] **CMS, inquiry, story, member and auth flows:** Confirm CMS edits, contact/service submissions, story moderation, XLSX/CSV import, manual member invites, signup/login/session refresh/logout, and server-side role checks are complete. Do not turn code presence into a completion claim without staging evidence.
-- [ ] **Payment fail-closed behavior:** Keep checkout/capture unavailable when credentials are missing, mismatched, or placeholders. Simulation may not create paid entitlements or real revenue in production. If Stripe/PayPal sandbox checks cannot be completed, leave the corresponding live gateway disabled and record the limitation.
+- [x] **Payment fail-closed behavior (source implementation):** Keep checkout/capture unavailable when credentials are missing, mismatched, or placeholders. Simulation may not create paid entitlements or real revenue in production. If Stripe/PayPal sandbox checks cannot be completed, leave the corresponding live gateway disabled and record the limitation.
 - [ ] **Email delivery:** If account, inquiry, or operational emails are intended to be active at launch, configure production SMTP credentials and verify delivery to a controlled mailbox. Otherwise keep email notifications explicitly disabled/fallback-safe and state that in the release note. Never report a simulated email as delivered.
 
 ### 2.2 Acceptance and evidence on a disposable/staging environment
